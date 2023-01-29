@@ -36,7 +36,7 @@ async def choose_location(callback: CallbackQuery):
 
 
 def add_period_keyboard(keyboard: InlineKeyboardBuilder, callback_data):
-
+    print(callback_data)
     if isinstance(callback_data, DevCountCF):
         base_cost = 50 + 100 * callback_data.count
         end_data = {"count": callback_data.count}
@@ -204,21 +204,22 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
     """
 
     keyboard = InlineKeyboardBuilder()
-    callback_factory = ConfirmPaymentCF(
-        type_="new",
-        cost=callback_data.cost,
-        count=callback_data.count,
-        month=callback_data.month,
-    )
 
     if callback_data.type_ == "extend":
         # Если это продление аренды
-        callback_factory.type_ = "extend"
-        callback_factory.connection_id = callback_data.connection_id
+        confirm_callback = ConfirmPaymentCF(
+            type_="extend",
+            cost=callback_data.cost,
+            count=1,
+            month=callback_data.month,
+            connection_id=callback_data.connection_id,
+            server_id=callback_data.server_id,
+        )
+
         keyboard.add(
             InlineKeyboardButton(
                 text=f"Оплатить {callback_data.cost} ₽",
-                callback_data=callback_factory.pack(),
+                callback_data=confirm_callback.pack(),
             )
         )
         text = (
@@ -231,13 +232,19 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
         )
 
     elif callback_data.type_ == "new":
-        callback_factory.type_ = "new"
-        callback_factory.server_id = callback_data.server_id
+        # Новое подключение
+        confirm_callback = ConfirmPaymentCF(
+            type_="new",
+            cost=callback_data.cost,
+            count=callback_data.count,
+            month=callback_data.month,
+            server_id=callback_data.server_id,
+        )
         # Новая покупка
         keyboard.add(
             InlineKeyboardButton(
                 text=f"Оплатить {callback_data.cost} ₽",
-                callback_data=callback_factory.pack(),
+                callback_data=confirm_callback.pack(),
             )
         )
         text = (
@@ -249,7 +256,7 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
         keyboard.add(InlineKeyboardButton(text="✖️Отмена", callback_data="start"))
 
     else:
-        text = "Неверные данные!"
+        text = "❗Неверные данные❗"
         keyboard.add(InlineKeyboardButton(text="✖️Отмена", callback_data="start"))
 
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())

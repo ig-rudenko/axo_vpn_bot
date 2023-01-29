@@ -1,19 +1,17 @@
 from datetime import datetime
 
-from sqlalchemy import update as sqlalchemy_update, insert
-from sqlalchemy import (
-    ForeignKey,
-    String,
-    Integer,
-    DateTime,
-    Column,
-    Table,
-    select,
-    Text,
-    func,
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship, load_only
 from sqlalchemy import exc
+
+from sqlalchemy.schema import ForeignKey, Column, Table
+from sqlalchemy.types import String, Integer, DateTime, Text
+
+from sqlalchemy.sql import select, insert, update as sqlalchemy_update
+from sqlalchemy.sql.functions import func
+
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm.strategy_options import load_only, selectinload
+from sqlalchemy.orm.collections import InstrumentedList
+
 from .db_connector import Base, async_db_session
 
 
@@ -46,7 +44,19 @@ class ModelAdmin:
             async with async_db_session() as session:
                 results = await session.execute(query)
                 (result,) = results.one()
+                result: cls
                 return result
+        except exc.NoResultFound:
+            return None
+
+    @classmethod
+    async def filter(cls, **kwargs):
+        params = [getattr(cls, key) == val for key, val in kwargs.items()]
+        query = select(cls).where(*params)
+        try:
+            async with async_db_session() as session:
+                results = await session.execute(query)
+                return results.scalars()
         except exc.NoResultFound:
             return None
 
@@ -79,20 +89,42 @@ class User(Base, ModelAdmin):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tg_id: Mapped[int]
     vpn_connections: Mapped[list["VPNConnection"]] = relationship(
-        secondary=user_vpn_connections_association_table
+        secondary=user_vpn_connections_association_table, backref="users"
     )
     active_bills: Mapped[list["ActiveBills"]] = relationship()
 
     @classmethod
-    async def get_by_tg(cls, tg_id: int):
-        query = select(cls).where(cls.tg_id == tg_id)
-        try:
-            async with async_db_session() as session:
-                results = await session.execute(query)
-                (result,) = results.one()
-                return result
-        except exc.NoResultFound:
-            return None
+    async def get_or_create(cls, tg_id: int):
+        user: User = await User.get(tg_id=tg_id)
+        if user is None:
+            user: User = await User.get(tg_id=await User.create(tg_id=tg_id))
+        return user
+
+    async def get_connections(self) -> InstrumentedList:
+        async with async_db_session() as session:
+            query = (
+                select(User)
+                .where(User.tg_id == self.tg_id)
+                .options(selectinload(User.vpn_connections))
+            )
+            user = await session.execute(query)
+
+        return user.scalars().one().vpn_connections
+
+    async def get_active_bills(self) -> InstrumentedList:
+        async with async_db_session() as session:
+            query = (
+                select(User)
+                .where(User.tg_id == self.tg_id)
+                .options(
+                    selectinload(User.active_bills).selectinload(
+                        ActiveBills.vpn_connections
+                    )
+                )
+            )
+            user = await session.execute(query)
+
+        return user.scalars().one().active_bills
 
 
 class Server(Base, ModelAdmin):
@@ -148,7 +180,7 @@ class ActiveBills(Base, ModelAdmin):
     bill_id: Mapped[str] = mapped_column(String(255))
     user: Mapped[int] = mapped_column(ForeignKey("users.id"))
     vpn_connections: Mapped[list["VPNConnection"]] = relationship(
-        secondary=bills_vpn_connections_association_table
+        secondary=bills_vpn_connections_association_table, backref="active_bills"
     )
     available_to: Mapped[datetime] = mapped_column(DateTime())
     type: Mapped[str] = mapped_column(String(50))

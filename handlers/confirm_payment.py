@@ -15,12 +15,14 @@ router = Router()
 async def payment_answer(
     callback: CallbackQuery, keyboard: InlineKeyboardBuilder, data: dict
 ):
-    text = f"Ссылка на оплату через платежную систему Qiwi: "
-    f'<a href="{data["payUrl"]}">Оплатить</a>\nДоступна в течение 10 минут!\n\n'
-    f"Реквизиты банковской карты и регистрационные данные передаются по <b>защищенным протоколам</b> и не "
-    f"попадут в интернет-магазин и третьим лицам.\nПлатежи обрабатываются на защищенной странице процессинга "
-    f'по стандарту <a href="https://ru.wikipedia.org/wiki/PCI_DSS">'
-    f"<b>PCI DSS – Payment Card Industry Data Security Standard.</b></a>"
+    text = (
+        f"Ссылка на оплату через платежную систему Qiwi: "
+        f'<a href="{data["payUrl"]}">Оплатить</a>\nДоступна в течение 10 минут!\n\n'
+        f"Реквизиты банковской карты и регистрационные данные передаются по <b>защищенным протоколам</b> и не "
+        f"попадут в интернет-магазин и третьим лицам.\nПлатежи обрабатываются на защищенной странице процессинга "
+        f'по стандарту <a href="https://ru.wikipedia.org/wiki/PCI_DSS">'
+        f"<b>PCI DSS – Payment Card Industry Data Security Standard.</b></a>"
+    )
 
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
     await callback.answer()
@@ -78,11 +80,7 @@ async def create_bill_for_new_rent(
         await session.commit()
 
     # Пользователь
-    if user := await User.get(tg_id=callback.from_user.id):
-        user_id = user.id
-    else:
-        # Если нет, то создаем
-        user_id = await User.create(tg_id=callback.from_user.id)
+    user: User = await User.get_or_create(tg_id=callback.from_user.id)
 
     qiwi_payment = QIWIPayment()
     if data := await qiwi_payment.create_bill(value=callback_data.cost):
@@ -90,7 +88,7 @@ async def create_bill_for_new_rent(
         # Добавляем счет об оплате
         await ActiveBills.add(
             bill_id=data["billId"],
-            user=user_id,
+            user=user.id,
             available_to=qiwi_payment.available_to,
             type="new",
             rent_month=callback_data.month,
@@ -126,7 +124,7 @@ async def create_bill_for_exist_rent(
         )
     )
 
-    user = await User.get(id=callback.from_user.id)
+    user = await User.get_or_create(tg_id=callback.from_user.id)
 
     if not callback_data.connection_id:
         await callback.message.edit_text(
@@ -146,7 +144,7 @@ async def create_bill_for_exist_rent(
             type="extend",
             rent_month=callback_data.month,
             pay_url=data["payUrl"],
-            vpn_connections=VPNConnection.get(id=callback_data.connection_id),
+            vpn_connections=[await VPNConnection.get(id=callback_data.connection_id)],
         )
 
         # Формируем ответ по оплате
