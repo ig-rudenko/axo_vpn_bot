@@ -2,5 +2,6 @@ sqlalchemy>=2.0.0
 mysqlclient
 aiomysql
 aiogram==3.0.0b3
-emoji-country-flag
 aiohttp
+asyncssh
+emoji-country-flag

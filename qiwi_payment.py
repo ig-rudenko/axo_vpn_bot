@@ -32,3 +32,18 @@ class QIWIPayment:
             return await response.json()
 
         return {}
+
+    async def check_bill_status(self, bill_id: str) -> str:
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(
+                url=f"https://api.qiwi.com/partner/bill/v1/bills/{bill_id}",
+                headers={
+                    "accept": "application/json",
+                    "Authorization": f"Bearer {self._token}",
+                },
+            )
+        if response.status == 200:
+            result = await response.json()
+            return result["status"]["value"]
+
+        return "None"
