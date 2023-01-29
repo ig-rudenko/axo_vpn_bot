@@ -42,7 +42,9 @@ async def show_profile(callback: CallbackQuery):
 
     # Если нет подключений у пользователя
     if not len(vpn_connections):
-        keyboard.add(InlineKeyboardButton(text="Купить", callback_data="show_prices:1"))
+        keyboard.add(
+            InlineKeyboardButton(text="Купить", callback_data="choose_location")
+        )
         keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="start"))
         await callback.message.edit_text(
             text + "🟠 У вас нет доступных подключений",
@@ -52,7 +54,7 @@ async def show_profile(callback: CallbackQuery):
         return
 
     # Имеются подключения
-    text += f"У вас имеется {len(vpn_connections)}\n\n"
+    text += f"У вас имеется: {len(vpn_connections)} подключений\n\n"
 
     # Смотрим по очереди подключения
     for i, connection in enumerate(vpn_connections, 1):
@@ -76,27 +78,37 @@ async def show_profile(callback: CallbackQuery):
                 f"Доступно до {connection.available_to.strftime('%Y.%m.%d %H:%M')}\n"
             )
 
+        connection_buttons = [
+            InlineKeyboardButton(
+                text=f"Подключение {i} - ⚙️ Конфиг",
+                callback_data=f"get_config::dev[0]:{i}",
+            )
+        ]
+
         # Имеется ли информация о продлении данного подключения
         for bill in active_bills:
             conn_ids = [conn.id for conn in bill.vpn_connections]
             if bill.type == "extend" and connection.id in conn_ids:
                 text += (
-                    f"\nПродление услуги на {bill.rent_month} {month_verbose(bill.rent_month)}"
+                    f"Вы уже запросили продление услуги на {bill.rent_month} {month_verbose(bill.rent_month)}\n"
                     f' <a href="{bill.pay_url}">Форма оплаты</a>'
-                    f' доступна до {bill.available_to.strftime("%H:%M:%S")}\n\n'
+                    f' доступна до {bill.available_to.strftime("%H:%M:%S")}\n'
                 )
+                break
+        else:
+            # Если нет зарегистрированных форм оплаты для данного подключения,
+            # то добавляем кнопку продления
+            connection_buttons.append(
+                InlineKeyboardButton(
+                    text=f"Подключение {i} - продлить",
+                    callback_data=extend_rent_callback.pack(),
+                )
+            )
 
-        keyboard.row(
-            InlineKeyboardButton(text=f"Подключение {i}", callback_data="show_profile"),
-            InlineKeyboardButton(
-                text="Продлить",
-                callback_data=extend_rent_callback.pack(),
-            ),
-            InlineKeyboardButton(
-                text="Конфиг",
-                callback_data=f"get_config:{callback.from_user.id}:dev[0]:{i}",
-            ),
-        )
+        text += "\n"
+
+        # Формируем кнопки для данного подключения
+        keyboard.row(*connection_buttons)
 
     keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="start"))
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())

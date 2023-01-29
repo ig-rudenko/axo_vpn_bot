@@ -27,3 +27,7 @@ class ConfirmPaymentCallbackFactory(CallbackData, prefix="submit_buy"):
     month: int
     server_id: int | None
     connection_id: int | None
+
+
+class GetConfigCallbackFactory(CallbackData, prefix="config"):
+    connection_id: int
