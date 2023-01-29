@@ -26,6 +26,12 @@ class ModelAdmin:
             return res.lastrowid
 
     @classmethod
+    async def add(cls, **kwargs):
+        async with async_db_session() as session:
+            session.add(cls(**kwargs))
+            await session.commit()
+
+    @classmethod
     async def update(cls, id_, **kwargs):
         query = sqlalchemy_update(User).where(User.id == id_).values(**kwargs)
         async with async_db_session() as session:
@@ -33,8 +39,9 @@ class ModelAdmin:
             await session.commit()
 
     @classmethod
-    async def get(cls, id_):
-        query = select(cls).where(cls.id == id_)
+    async def get(cls, **kwargs):
+        params = [getattr(cls, key) == val for key, val in kwargs.items()]
+        query = select(cls).where(*params)
         try:
             async with async_db_session() as session:
                 results = await session.execute(query)

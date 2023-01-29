@@ -11,6 +11,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from sqlalchemy import select, update
 
+from qiwi_payment import QIWIPayment
 from .callback_factories import ConfirmPaymentCallbackFactory as ConfirmPaymentCF
 from db import Server, VPNConnection, async_db_session, ActiveBills, User
 
@@ -22,9 +23,11 @@ async def create_bill_for_new_rent(
     callback: CallbackQuery, callback_data: ConfirmPaymentCF
 ):
 
-    # Проверяем, сколько свободно подключений на данном сервере
+    # Получаем свободные подключения на данном сервере в необходимом кол-ве.
     free_connection = list(
-        await VPNConnection.get_free(callback_data.server_id, callback_data.count)
+        await VPNConnection.get_free(
+            server_id=callback_data.server_id, limit=callback_data.count
+        )
     )
 
     keyboard = InlineKeyboardBuilder()
@@ -53,58 +56,25 @@ async def create_bill_for_new_rent(
         await session.commit()
 
     # Пользователь
-    if user := await User.get_by_tg(tg_id=callback.from_user.id):
+    if user := await User.get(tg_id=callback.from_user.id):
         user_id = user.id
     else:
         # Если нет, то создаем
         user_id = await User.create(tg_id=callback.from_user.id)
 
-    available_time = datetime.now() + timedelta(minutes=10)
-
-    # Время жизни формы оплаты 10 мин
-    async with aiohttp.ClientSession() as session:
-        response = await session.put(
-            url=f"https://api.qiwi.com/partner/bill/v1/bills/{uuid.uuid4()}",
-            headers={
-                "accept": "application/json",
-                "Authorization": "Bearer " + os.getenv("QIWI_TOKEN"),
-            },
-            json={
-                "amount": {"currency": "RUB", "value": callback_data.cost},
-                "comment": "Axo VPN",
-                "expirationDateTime": f"{available_time.strftime('%Y-%m-%dT%H:%M:%S+03:00')}",
-            },
-        )
-    if response.status == 200:
-        data = await response.json()
+    qiwi_payment = QIWIPayment()
+    if data := await qiwi_payment.create_bill(value=callback_data.cost):
 
         # Добавляем счет об оплате
-        async with async_db_session() as session:
-            new_bill = ActiveBills(
-                bill_id=data["billId"],
-                user=user_id,
-                available_to=available_time,
-                type="new",
-                rent_month=callback_data.month,
-                pay_url=data["payUrl"],
-                vpn_connections=free_connection,
-            )
-            session.add(new_bill)
-            await session.commit()
-
-        # res = await ActiveBills.create(
-        #     bill_id=bill_id,
-        #     user=user_id
-        # )
-        # print(
-        #     bill_id,
-        #     str(available_time.timestamp()),
-        #     user_id,
-        #     # user_devs_ids,
-        #     "new",
-        #     str(rent_to.timestamp()),
-        #     data["payUrl"],
-        # )
+        await ActiveBills.add(
+            bill_id=data["billId"],
+            user=user_id,
+            available_to=qiwi_payment.available_to,
+            type="new",
+            rent_month=callback_data.month,
+            pay_url=data["payUrl"],
+            vpn_connections=free_connection,
+        )
 
         await callback.message.edit_text(
             f"Ссылка на оплату через платежную систему Qiwi: "
