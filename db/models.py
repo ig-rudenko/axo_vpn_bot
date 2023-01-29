@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import exc
 
 from sqlalchemy.schema import ForeignKey, Column, Table
-from sqlalchemy.types import String, Integer, DateTime, Text
+from sqlalchemy.types import String, DateTime, Text
 
 from sqlalchemy.sql import select, insert, update as sqlalchemy_update
 from sqlalchemy.sql.functions import func
@@ -75,22 +75,12 @@ class ModelAdmin:
             return result.scalars()
 
 
-user_vpn_connections_association_table = Table(
-    "user_vpn_connections",
-    Base.metadata,
-    Column("user_id", ForeignKey("users.id")),
-    Column("vpn_conn_id", ForeignKey("vpn_connections.id")),
-)
-
-
 class User(Base, ModelAdmin):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tg_id: Mapped[int]
-    vpn_connections: Mapped[list["VPNConnection"]] = relationship(
-        secondary=user_vpn_connections_association_table, backref="users"
-    )
+
     active_bills: Mapped[list["ActiveBills"]] = relationship()
 
     @classmethod
@@ -100,16 +90,12 @@ class User(Base, ModelAdmin):
             user: User = await User.get(tg_id=await User.create(tg_id=tg_id))
         return user
 
-    async def get_connections(self) -> InstrumentedList:
+    async def get_connections(self) -> list:
         async with async_db_session() as session:
-            query = (
-                select(User)
-                .where(User.tg_id == self.tg_id)
-                .options(selectinload(User.vpn_connections))
-            )
-            user = await session.execute(query)
+            query = select(VPNConnection).where(VPNConnection.user_id == self.id)
+            connections = await session.execute(query)
 
-        return user.scalars().one().vpn_connections
+        return [c for c in connections.scalars()]
 
     async def get_active_bills(self) -> InstrumentedList:
         async with async_db_session() as session:
@@ -145,10 +131,10 @@ class VPNConnection(Base, ModelAdmin):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     server_id: Mapped[int] = mapped_column(ForeignKey("servers.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     available: Mapped[bool]
     local_ip: Mapped[str] = mapped_column(String(15))
-    available_to: Mapped[datetime] = mapped_column(server_default=func.now())
-    free: Mapped[int] = mapped_column(Integer(), default=1)
+    available_to: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=True)
     config: Mapped[str] = mapped_column(Text())
 
     @staticmethod
@@ -157,7 +143,7 @@ class VPNConnection(Base, ModelAdmin):
             query = (
                 select(VPNConnection)
                 .where(VPNConnection.server_id == server_id)
-                .where(VPNConnection.free == 1)
+                .where(VPNConnection.user_id.is_(None))
                 .options(load_only(VPNConnection.id))
                 .limit(limit)
             )

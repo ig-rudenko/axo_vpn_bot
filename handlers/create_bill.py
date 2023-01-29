@@ -39,6 +39,8 @@ async def create_bill_for_new_rent(
     keyboard = InlineKeyboardBuilder()
     keyboard.add(InlineKeyboardButton(text="🔝 Назад", callback_data="start"))
 
+    user = await User.get_or_create(tg_id=callback.from_user.id)
+
     if not callback_data.server_id:
         await callback.message.edit_text(
             "❗️Вы не выбрали VPN сервер для подключения❗️",
@@ -75,7 +77,10 @@ async def create_bill_for_new_rent(
     async with async_db_session() as session:
         await session.execute(
             update(VPNConnection),
-            [{"id": conn.id, "free": 2} for conn in free_connection],
+            [
+                {"id": conn.id, "user_id": user.id, "available": False}
+                for conn in free_connection
+            ],
         )
         await session.commit()
 
@@ -101,7 +106,16 @@ async def create_bill_for_new_rent(
 
     else:
         # Если не удалось создать форму оплаты, тогда освобождаем забронированные устройства
-        # await unpause_devs(user_devs_ids)
+        async with async_db_session() as session:
+            await session.execute(
+                update(VPNConnection),
+                [
+                    {"id": conn.id, "user_id": None, "available": False}
+                    for conn in free_connection
+                ],
+            )
+            await session.commit()
+
         await callback.message.edit_text(
             "Технические неполадки, проносим свои извинения ☹️",
             reply_markup=keyboard.as_markup(),

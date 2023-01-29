@@ -1,16 +1,16 @@
+import hashlib
+import io
+
 import flag
-from magic_filter import F
+
 from aiogram import Router
-from aiogram.types import InlineKeyboardButton, CallbackQuery
+from aiogram.types import InlineKeyboardButton, CallbackQuery, BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from sqlalchemy import update, select
-from sqlalchemy.orm import selectinload
-
-from qiwi_payment import QIWIPayment
 from .callback_factories import ExtendRentCallbackFactory as ExtendRentCF
-from db import VPNConnection, async_db_session, ActiveBills, User, Server
+from db import VPNConnection, ActiveBills, User, Server
 from .buy_service import month_verbose
+from .callback_factories import GetConfigCallbackFactory as GetConfigCF
 
 router = Router()
 
@@ -59,6 +59,7 @@ async def show_profile(callback: CallbackQuery):
     # Смотрим по очереди подключения
     for i, connection in enumerate(vpn_connections, 1):
         connection: VPNConnection
+        connection_buttons = []
 
         # Определяем местоположение подключения
         if server := await Server.get(id=connection.server_id):
@@ -77,13 +78,12 @@ async def show_profile(callback: CallbackQuery):
             text += (
                 f"Доступно до {connection.available_to.strftime('%Y.%m.%d %H:%M')}\n"
             )
-
-        connection_buttons = [
-            InlineKeyboardButton(
-                text=f"Подключение {i} - ⚙️ Конфиг",
-                callback_data=f"get_config::dev[0]:{i}",
+            connection_buttons.append(
+                InlineKeyboardButton(
+                    text=f"Подключение {i} - ⚙️ Конфиг",
+                    callback_data=GetConfigCF(connection_id=connection.id).pack(),
+                )
             )
-        ]
 
         # Имеется ли информация о продлении данного подключения
         for bill in active_bills:
@@ -112,4 +112,49 @@ async def show_profile(callback: CallbackQuery):
 
     keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="start"))
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
+    await callback.answer()
+
+
+@router.callback_query(GetConfigCF.filter())
+async def create_bill_for_exist_rent(
+    callback: CallbackQuery, callback_data: GetConfigCF
+):
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="🔝 На главную", callback_data="start"))
+
+    user = await User.get(tg_id=callback.from_user.id)
+    if user is None:
+        # Не существует пользователя
+        await callback.message.edit_text(
+            "❗️У вас нет доступных конфигурации❗️", reply_markup=keyboard.as_markup()
+        )
+        await callback.answer()
+        return
+
+    # Смотрим подключение
+    connection = await VPNConnection.get(
+        id=callback_data.connection_id, user_id=user.id
+    )
+    if connection is None:
+        # Не существует такого подключения у данного пользователя
+        await callback.message.edit_text(
+            "❗Неверная конфигурация❗️", reply_markup=keyboard.as_markup()
+        )
+        await callback.answer()
+        return
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="show_profile"))
+
+    config = connection.config.encode()
+    file_name = hashlib.md5(config).hexdigest()
+
+    await callback.message.delete()
+    await callback.message.answer_document(
+        BufferedInputFile(bytes(config), filename=file_name),
+        caption=f"Не изменяйте содержимое файла, во избежание нестабильной работы",
+    )
+    await callback.message.answer(
+        text=f"Вернуться в профиль", reply_markup=keyboard.as_markup()
+    )
     await callback.answer()
