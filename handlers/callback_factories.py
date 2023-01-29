@@ -25,4 +25,5 @@ class ConfirmPaymentCallbackFactory(CallbackData, prefix="submit_buy"):
     cost: int
     count: int
     month: int
-    server_id: int
+    server_id: int | None
+    connection_id: int | None

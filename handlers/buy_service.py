@@ -209,12 +209,12 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
         cost=callback_data.cost,
         count=callback_data.count,
         month=callback_data.month,
-        server_id=callback_data.server_id,
     )
 
     if callback_data.type_ == "extend":
         # Если это продление аренды
         callback_factory.type_ = "extend"
+        callback_factory.connection_id = callback_data.connection_id
         keyboard.add(
             InlineKeyboardButton(
                 text=f"Оплатить {callback_data.cost} ₽",
@@ -232,6 +232,7 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
 
     elif callback_data.type_ == "new":
         callback_factory.type_ = "new"
+        callback_factory.server_id = callback_data.server_id
         # Новая покупка
         keyboard.add(
             InlineKeyboardButton(
