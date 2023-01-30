@@ -87,7 +87,7 @@ class User(Base, ModelAdmin):
     async def get_or_create(cls, tg_id: int):
         user: User = await User.get(tg_id=tg_id)
         if user is None:
-            user: User = await User.get(tg_id=await User.create(tg_id=tg_id))
+            user: User = await User.get(id=await User.create(tg_id=tg_id))
         return user
 
     async def get_connections(self) -> list:
