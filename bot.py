@@ -29,7 +29,7 @@ BOT_PATH = f"/webhook/bot/{TOKEN[:23]}"
 async def on_startup(dispatcher: Dispatcher, bot: Bot):
     await async_db_session.create_all()
 
-    s = await bot.set_webhook(
+    await bot.set_webhook(
         f"{BASE_URL}{BOT_PATH}",
         certificate=FSInputFile(CERTIFICATE_PATH),
         ip_address=PUBLIC_IP,

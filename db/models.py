@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import exc
 
 from sqlalchemy.schema import ForeignKey, Column, Table
-from sqlalchemy.types import String, DateTime, Text
+from sqlalchemy.types import String, DateTime, Text, Integer
 
 from sqlalchemy.sql import select, insert, update as sqlalchemy_update
 from sqlalchemy.sql.functions import func
@@ -117,8 +117,9 @@ class Server(Base, ModelAdmin):
     __tablename__ = "servers"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(50))
-    ip: Mapped[str] = mapped_column(String(45))
+    name: Mapped[str] = mapped_column(String(50), unique=True)
+    ip: Mapped[str] = mapped_column(String(45), unique=True)
+    port: Mapped[str] = mapped_column(Integer(), default=22)
     login: Mapped[str] = mapped_column(String(50))
     password: Mapped[str] = mapped_column(String(50))
     location: Mapped[str] = mapped_column(String(100))
@@ -168,7 +169,7 @@ class ActiveBills(Base, ModelAdmin):
     vpn_connections: Mapped[list["VPNConnection"]] = relationship(
         secondary=bills_vpn_connections_association_table, backref="active_bills"
     )
-    available_to: Mapped[datetime] = mapped_column(DateTime())
+    available_to: Mapped[datetime] = mapped_column(DateTime(), nullable=True, default=None)
     type: Mapped[str] = mapped_column(String(50))
     rent_month: Mapped[int]
     pay_url: Mapped[str] = mapped_column(String(255))
