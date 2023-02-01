@@ -107,8 +107,9 @@ async def show_profile(callback: CallbackQuery):
 
         text += "\n"
 
-        # Формируем кнопки для данного подключения
-        keyboard.row(*connection_buttons)
+        if connection_buttons:
+            # Формируем кнопки для данного подключения
+            keyboard.row(*connection_buttons)
 
     keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="start"))
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
@@ -116,9 +117,7 @@ async def show_profile(callback: CallbackQuery):
 
 
 @router.callback_query(GetConfigCF.filter())
-async def create_bill_for_exist_rent(
-    callback: CallbackQuery, callback_data: GetConfigCF
-):
+async def get_user_config(callback: CallbackQuery, callback_data: GetConfigCF):
     keyboard = InlineKeyboardBuilder()
     keyboard.row(InlineKeyboardButton(text="🔝 На главную", callback_data="start"))
 
@@ -131,25 +130,30 @@ async def create_bill_for_exist_rent(
         await callback.answer()
         return
 
-    # Смотрим подключение
+    # Смотрим запрашиваемое подключение
     connection = await VPNConnection.get(
         id=callback_data.connection_id, user_id=user.id
     )
-    if connection is None:
-        # Не существует такого подключения у данного пользователя
+    if connection is None or not connection.available or not connection.available_to:
+        # Не существует такого подключения у данного пользователя или оно недоступно
         await callback.message.edit_text(
             "❗Неверная конфигурация❗️", reply_markup=keyboard.as_markup()
         )
         await callback.answer()
         return
 
+    # Конфигурация пользователя найдена
     keyboard = InlineKeyboardBuilder()
     keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="show_profile"))
 
+    # Формируем текст конфигурации и её имя как хэш.
     config = connection.config.encode()
     file_name = hashlib.md5(config).hexdigest()
 
+    # Удаляем предыдущее сообщение от бота.
     await callback.message.delete()
+
+    # Отправляем конфигурационный файл пользователю.
     await callback.message.answer_document(
         BufferedInputFile(bytes(config), filename=file_name),
         caption=f"Не изменяйте содержимое файла, во избежание нестабильной работы",

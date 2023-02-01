@@ -33,7 +33,7 @@ class QIWIPayment:
 
         return {}
 
-    async def check_bill_status(self, bill_id: str) -> str:
+    async def check_bill_status(self, bill_id: str) -> str | None:
         async with aiohttp.ClientSession() as session:
             response = await session.get(
                 url=f"https://api.qiwi.com/partner/bill/v1/bills/{bill_id}",
@@ -45,5 +45,3 @@ class QIWIPayment:
         if response.status == 200:
             result = await response.json()
             return result["status"]["value"]
-
-        return "None"

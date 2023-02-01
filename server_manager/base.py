@@ -1,6 +1,7 @@
 import re
 
 import asyncssh
+from asyncssh import ProcessError
 
 from db.models import Server
 
@@ -100,6 +101,7 @@ class ServerConnection:
     def __init__(self, server: Server):
         self.auth = {
             "host": server.ip,
+            "port": server.port,
             "username": server.login,
             "password": server.password,
             "known_hosts": None,
@@ -123,9 +125,14 @@ class ServerConnection:
 
     async def unfreeze_connection(self, connection_ip: str):
         async with asyncssh.connect(**self.auth) as conn:
-            await conn.run(
-                f"ip route del {connection_ip} via 127.0.0.1", check=True, timeout=3
-            )
+            try:
+                await conn.run(
+                    f"ip route del {connection_ip} via 127.0.0.1", check=True, timeout=3
+                )
+            except ProcessError as exc:
+                # Если уже разморожено
+                if exc.exit_status != 2:
+                    raise exc
 
     async def freeze_connection(self, connection_ip: str):
         async with asyncssh.connect(**self.auth) as conn:
@@ -133,7 +140,7 @@ class ServerConnection:
                 f"ip route add {connection_ip} via 127.0.0.1", check=True, timeout=3
             )
 
-    async def regenerate_config(self, config: ConfigManager):
+    async def regenerate_config(self, config: ConfigManager) -> ConfigManager:
         async with asyncssh.connect(**self.auth) as conn:
             result = await conn.run("cat /etc/wireguard/params", check=True, timeout=3)
             wg_params = {
@@ -169,9 +176,8 @@ class ServerConnection:
                 timeout=3,
             )
 
-            # Create client file and add the server as a peer
-            await conn.run(
-                rf'''echo "[Interface]
+            # Новая конфигурация
+            new_config = f"""[Interface]
 PrivateKey = {client_private_key}
 Address = {config.client_ip_v4}/32,{config.client_ip_v6}/128
 DNS = {wg_params["CLIENT_DNS_1"]},{wg_params["CLIENT_DNS_2"]}
@@ -180,7 +186,11 @@ DNS = {wg_params["CLIENT_DNS_1"]},{wg_params["CLIENT_DNS_2"]}
 PublicKey = {wg_params["SERVER_PUB_KEY"]}
 PresharedKey = {client_pre_shared_key}
 Endpoint = {endpoint}
-AllowedIPs = 0.0.0.0/0,::/0" >>"/root/{config.name}"''',
+AllowedIPs = 0.0.0.0/0,::/0"""
+
+            # Create client file and add the server as a peer
+            await conn.run(
+                rf'''echo "{new_config}" >>"/root/{config.name}"''',
                 check=True,
                 timeout=3,
             )
@@ -201,3 +211,5 @@ AllowedIPs = {config.client_ip_v4}/32,{config.client_ip_v6}/128" >>"/etc/wiregua
                 check=True,
                 timeout=3,
             )
+
+            return ConfigManager(new_config, name=config.name)

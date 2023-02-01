@@ -29,11 +29,11 @@ class ModelAdmin:
             session.add(cls(**kwargs))
             await session.commit()
 
-    @classmethod
-    async def update(cls, id_, **kwargs):
-        query = sqlalchemy_update(User).where(User.id == id_).values(**kwargs)
+    async def update(self, **kwargs):
         async with async_db_session() as session:
-            await session.execute(query)
+            await session.execute(
+                sqlalchemy_update(VPNConnection), [{"id": self.id, **kwargs}]
+            )
             await session.commit()
 
     @classmethod
@@ -135,7 +135,9 @@ class VPNConnection(Base, ModelAdmin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     available: Mapped[bool]
     local_ip: Mapped[str] = mapped_column(String(15))
-    available_to: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=True)
+    available_to: Mapped[datetime] = mapped_column(
+        server_default=func.now(), nullable=True
+    )
     config: Mapped[str] = mapped_column(Text())
 
     @staticmethod
@@ -169,7 +171,9 @@ class ActiveBills(Base, ModelAdmin):
     vpn_connections: Mapped[list["VPNConnection"]] = relationship(
         secondary=bills_vpn_connections_association_table, backref="active_bills"
     )
-    available_to: Mapped[datetime] = mapped_column(DateTime(), nullable=True, default=None)
+    available_to: Mapped[datetime] = mapped_column(
+        DateTime(), nullable=True, default=None
+    )
     type: Mapped[str] = mapped_column(String(50))
     rent_month: Mapped[int]
     pay_url: Mapped[str] = mapped_column(String(255))
