@@ -1,4 +1,4 @@
-sqlalchemy>=2.0.0
+sqlalchemy==2.0.0
 mysqlclient
 aiomysql
 aiogram==3.0.0b3

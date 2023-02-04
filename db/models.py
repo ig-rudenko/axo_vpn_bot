@@ -18,18 +18,34 @@ from .db_connector import Base, async_db_session
 class ModelAdmin:
     @classmethod
     async def create(cls, **kwargs) -> int:
+        """
+        # Создаем новый объект
+        :param kwargs: Поля и значения для объекта
+        :return: Идентификатор PK
+        """
+
         async with async_db_session() as session:
             res = await session.execute(insert(cls).values(**kwargs))
             await session.commit()
             return res.lastrowid
 
     @classmethod
-    async def add(cls, **kwargs):
+    async def add(cls, **kwargs) -> None:
+        """
+        # Добавляем новый объект
+        :param kwargs: Поля и значения для объекта
+        """
+
         async with async_db_session() as session:
             session.add(cls(**kwargs))
             await session.commit()
 
-    async def update(self, **kwargs):
+    async def update(self, **kwargs) -> None:
+        """
+        # Обновляем текущий объект
+        :param kwargs: поля и значения, которые надо поменять
+        """
+
         async with async_db_session() as session:
             await session.execute(
                 sqlalchemy_update(VPNConnection), [{"id": self.id, **kwargs}]
@@ -38,6 +54,12 @@ class ModelAdmin:
 
     @classmethod
     async def get(cls, **kwargs):
+        """
+        # Возвращаем одну запись, которая удовлетворяет введенным параметрам
+        :param kwargs: поля и значения
+        :return: Объект или None
+        """
+
         params = [getattr(cls, key) == val for key, val in kwargs.items()]
         query = select(cls).where(*params)
         try:
@@ -51,6 +73,12 @@ class ModelAdmin:
 
     @classmethod
     async def filter(cls, **kwargs):
+        """
+        # Возвращаем все записи, которые удовлетворяют фильтру
+        :param kwargs: поля и значения
+        :return: ScalarResult, если нашли записи и пустой tuple, если нет
+        """
+
         params = [getattr(cls, key) == val for key, val in kwargs.items()]
         query = select(cls).where(*params)
         try:
@@ -58,10 +86,16 @@ class ModelAdmin:
                 results = await session.execute(query)
                 return results.scalars()
         except exc.NoResultFound:
-            return None
+            return ()
 
     @classmethod
     async def all(cls, values=None):
+        """
+        # Получаем все записи
+        :param values: Список полей, которые надо вернуть, если нет, то все (default None)
+        :return: ScalarResult записей
+        """
+
         if values and isinstance(values, list):
             # Определенные поля
             values = [getattr(cls, val) for val in values if isinstance(val, str)]
@@ -84,7 +118,7 @@ class User(Base, ModelAdmin):
     active_bills: Mapped[list["ActiveBills"]] = relationship()
 
     @classmethod
-    async def get_or_create(cls, tg_id: int):
+    async def get_or_create(cls, tg_id: int) -> "User":
         user: User = await User.get(tg_id=tg_id)
         if user is None:
             user: User = await User.get(id=await User.create(tg_id=tg_id))
@@ -110,7 +144,7 @@ class User(Base, ModelAdmin):
             )
             user = await session.execute(query)
 
-        return user.scalars().one().active_bills
+        return user.scalars().active_bills
 
 
 class Server(Base, ModelAdmin):
@@ -139,6 +173,7 @@ class VPNConnection(Base, ModelAdmin):
         server_default=func.now(), nullable=True
     )
     config: Mapped[str] = mapped_column(Text())
+    client_name: Mapped[str] = mapped_column(String(30))
 
     @staticmethod
     async def get_free(server_id: int, limit: int):

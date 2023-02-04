@@ -136,9 +136,14 @@ class ServerConnection:
 
     async def freeze_connection(self, connection_ip: str):
         async with asyncssh.connect(**self.auth) as conn:
-            await conn.run(
-                f"ip route add {connection_ip} via 127.0.0.1", check=True, timeout=3
-            )
+            try:
+                await conn.run(
+                    f"ip route add {connection_ip} via 127.0.0.1", check=True, timeout=3
+                )
+            except ProcessError as exc:
+                # Если уже заморожено
+                if exc.exit_status != 2:
+                    raise exc
 
     async def regenerate_config(self, config: ConfigManager) -> ConfigManager:
         async with asyncssh.connect(**self.auth) as conn:

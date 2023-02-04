@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 
@@ -10,7 +10,9 @@ class QIWIPayment:
 
     def __init__(self, currency="RUB", expiration_minutes=10):
         self.currency = currency
-        self.available_to = datetime.now() + timedelta(minutes=expiration_minutes)
+        offset = timedelta(hours=3)
+        current_time = datetime.now().astimezone(timezone(offset))
+        self.available_to = current_time + timedelta(minutes=expiration_minutes)
 
     async def create_bill(self, value: int) -> dict:
 

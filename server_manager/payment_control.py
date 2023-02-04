@@ -9,7 +9,12 @@ from db import ActiveBills, VPNConnection, Server, async_db_session
 from .base import ServerConnection
 
 
-async def payment_manager():
+async def payment_manager(period: int = 5):
+    """
+    Обработчик QIWI платежей
+    :param period: Период опроса (default 5 сек)
+    """
+
     qiwi = QIWIPayment(currency="RUB")
 
     while True:
@@ -62,8 +67,10 @@ async def payment_manager():
                         )
 
                 # Задержка перед запросами на QIWI
-                await asyncio.sleep(5)
+                await asyncio.sleep(3)
 
             except Exception as exc:
                 print(exc)
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
+
+        await asyncio.sleep(period)

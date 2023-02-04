@@ -18,7 +18,7 @@ class AsyncDatabaseSession:
 
         self._engine = create_async_engine(
             f"mysql+aiomysql://{login}:{password}@{host}/{database}?charset=utf8mb4",
-            echo=True,
+            # echo=True,  # TODO: DB echo=True
         )
         self._session = async_sessionmaker(
             self._engine,
