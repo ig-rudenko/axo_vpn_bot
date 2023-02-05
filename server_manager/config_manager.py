@@ -10,6 +10,8 @@ async def config_manager(period: int = 60 * 10):
     :param period: Период опроса (default 10 мин)
     """
 
+    print("=== Запущен сборщик VPN конфигураций ===")
+
     while True:
 
         for server in await Server.all():
@@ -30,6 +32,9 @@ async def config_manager(period: int = 60 * 10):
 
                     if current_config is None:
                         # Если в базе нет такой конфигурации, то добавляем
+                        print(
+                            f"# Север: {server.name:<15} | Добавляем конфигурацию для {real_config.client_ip_v4}"
+                        )
                         await VPNConnection.create(
                             server_id=server.id,
                             user_id=None,
@@ -44,10 +49,12 @@ async def config_manager(period: int = 60 * 10):
                     # Если нашли конфигурацию, то проверяем её с текущей на сервере.
                     if current_config.config != real_config.create_config():
                         # Если они отличаются, значит надо изменить конфиг в базе.
-
+                        print(
+                            f"# Север: {server.name:<15} | Изменяем конфигурацию для {real_config.client_ip_v4}"
+                        )
                         await current_config.update(config=real_config.create_config())
 
             except Exception as exc:
-                print(exc)
+                print(f"Сборщик VPN конфигураций | Сервер {server.name} | Ошибка {exc}")
 
         await asyncio.sleep(period)

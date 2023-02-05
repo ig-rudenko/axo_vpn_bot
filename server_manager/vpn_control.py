@@ -13,6 +13,8 @@ async def vpn_connections_manager(period: int = 60 * 10):
     :param period: Период опроса (default 10 мин)
     """
 
+    print("=== Запущен обработчик аренды VPN подключений ===")
+
     while True:
 
         # Вытягиваем из базы все VPN подключения, но без поля конфигурации.
@@ -42,7 +44,15 @@ async def vpn_connections_manager(period: int = 60 * 10):
                     connection.available_to < datetime.now() - timedelta(days=5)
                     and connection.available
                 ):
-                    sc = ServerConnection(await Server.get(id=connection.server_id))
+
+                    server = await Server.get(id=connection.server_id)
+                    sc = ServerConnection(server)
+
+                    print(
+                        f"# Сервер: {server.name:<15} | "
+                        f"Подключение {connection.local_ip} необходимо пересоздать"
+                    )
+
                     try:
                         # Замораживаем подключение, на всякий случай.
                         await sc.freeze_connection(connection.local_ip)
@@ -60,7 +70,11 @@ async def vpn_connections_manager(period: int = 60 * 10):
                     except (ConnectionError, ProcessError) as exc:
                         exc: ProcessError
                         # В случае ошибки на стороне сервера, будет попытка на следующей итерации.
-                        pass
+                        print(
+                            f"# Сервер: {server.name:<15} | "
+                            f"Подключение: {connection.local_ip} | Ошибка: {exc.stderr}"
+                        )
+
                     else:
                         # Освобождаем подключение от пользователя.
                         await connection.update(
@@ -70,12 +84,20 @@ async def vpn_connections_manager(period: int = 60 * 10):
                 else:
                     # Вышел строк аренды подключения.
                     # Замораживаем.
-                    sc = ServerConnection(await Server.get(id=connection.server_id))
+                    server = await Server.get(id=connection.server_id)
+                    sc = ServerConnection(server)
+                    print(
+                        f"# Сервер: {server.name:<15} | "
+                        f"Подключение {connection.local_ip} необходимо заморозить"
+                    )
                     await sc.freeze_connection(connection.local_ip)
                     # Подключение недоступно.
                     await connection.update(available=False)
 
             except Exception as exc:
-                print(exc)
+                print(
+                    f"Обработчик аренды VPN подключений |"
+                    f" Подключение: {connection.local_ip} | Ошибка: {exc}"
+                )
 
         await asyncio.sleep(period)

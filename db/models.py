@@ -52,6 +52,15 @@ class ModelAdmin:
             )
             await session.commit()
 
+    async def delete(self) -> None:
+        """
+        # Удаляем объект
+        :return:
+        """
+        async with async_db_session() as session:
+            await session.delete(self)
+            await session.commit()
+
     @classmethod
     async def get(cls, **kwargs):
         """
@@ -144,7 +153,7 @@ class User(Base, ModelAdmin):
             )
             user = await session.execute(query)
 
-        return user.scalars().active_bills
+        return user.scalars().one().active_bills
 
 
 class Server(Base, ModelAdmin):
@@ -192,8 +201,8 @@ class VPNConnection(Base, ModelAdmin):
 bills_vpn_connections_association_table = Table(
     "bills_vpn_connections",
     Base.metadata,
-    Column("bill_id", ForeignKey("active_bills.id")),
-    Column("vpn_conn_id", ForeignKey("vpn_connections.id")),
+    Column("bill_id", ForeignKey("active_bills.id", ondelete="CASCADE")),
+    Column("vpn_conn_id", ForeignKey("vpn_connections.id", ondelete="CASCADE")),
 )
 
 

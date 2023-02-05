@@ -34,8 +34,7 @@ class AsyncDatabaseSession:
 
     async def create_all(self):
         async with self._engine.begin() as conn:
-            result = await conn.run_sync(Base.metadata.create_all)
-            print(result)
+            await conn.run_sync(Base.metadata.create_all)
         await self._engine.dispose()
 
 

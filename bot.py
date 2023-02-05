@@ -11,8 +11,6 @@ from aiogram.types.input_file import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
 from handlers import introduction, buy_service, create_bill, profile
 
-from db import async_db_session
-
 
 TOKEN = getenv("TG_BOT_TOKEN")
 BASE_URL = getenv("BASE_URL")
@@ -27,8 +25,6 @@ BOT_PATH = f"/webhook/bot/{TOKEN[:23]}"
 
 
 async def on_startup(dispatcher: Dispatcher, bot: Bot):
-    await async_db_session.create_all()
-
     await bot.set_webhook(
         f"{BASE_URL}{BOT_PATH}",
         certificate=FSInputFile(CERTIFICATE_PATH),
