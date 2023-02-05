@@ -41,7 +41,9 @@ async def payment_manager(period: int = 5):
                     print(f"# Пользователь {bill.user:<5} | Счет отклонен")
                     # Забронированные за пользователем подключения надо освободить.
                     for conn in bill.vpn_connections:
-                        await conn.update(user_id=None, available_to=None, available=False)
+                        await conn.update(
+                            user_id=None, available_to=None, available=False
+                        )
 
                     await bill.delete()
 

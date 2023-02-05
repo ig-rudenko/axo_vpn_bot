@@ -89,12 +89,10 @@ async def show_countries(callback: CallbackQuery):
     # Смотрим список VPN серверов
     for server in await Server.all(values=["country_code", "location"]):
         # Добавляем флаг страны и местоположение VPN сервера
-        countries += flag.flagize(
-            f":{server.country_code}: {server.location}\n", subregions=True
-        )
+        countries += server.verbose_location + "\n"
 
     keyboard = InlineKeyboardBuilder(
-        [[InlineKeyboardButton(text="🔙 Назад", callback_data=f"start")]]
+        [[InlineKeyboardButton(text="🔙 Назад", callback_data="start")]]
     )
     await callback.message.edit_text(
         text="Список стран\n" + countries,

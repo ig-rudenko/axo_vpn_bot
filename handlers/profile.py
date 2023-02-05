@@ -1,7 +1,4 @@
 import hashlib
-import io
-
-import flag
 
 from aiogram import Router
 from aiogram.types import InlineKeyboardButton, CallbackQuery, BufferedInputFile
@@ -22,7 +19,7 @@ async def show_profile(callback: CallbackQuery):
     user: User = await User.get_or_create(tg_id=callback.from_user.id)
 
     # Доступные пользователю VPN подключения
-    vpn_connections = await user.get_connections()
+    vpn_connections: list = await user.get_connections()
 
     # Текущие неоплаченные счета
     active_bills = await user.get_active_bills()
@@ -31,17 +28,18 @@ async def show_profile(callback: CallbackQuery):
     for bill in active_bills:
         if bill.type == "new":
             bill: ActiveBills
+            server = await Server.get(id=bill.vpn_connections[0].server_id)
             text += (
                 f"⏳ Ожидается оплата:\n"
-                f"Новое подключение "
                 f'<a href="{bill.pay_url}">Форма оплаты</a>'
-                f' доступна до {bill.available_to.strftime("%H:%M:%S")}\n\n'
+                f' доступна до {bill.available_to.strftime("%H:%M:%S")}\n'
+                f"{server.verbose_location} Кол-во: {len(bill.vpn_connections)}"
             )
 
     keyboard = InlineKeyboardBuilder()
 
     # Если нет подключений у пользователя
-    if not len(vpn_connections):
+    if not len(vpn_connections) and not len(active_bills):
         keyboard.add(
             InlineKeyboardButton(text="Купить", callback_data="choose_location")
         )
@@ -53,8 +51,9 @@ async def show_profile(callback: CallbackQuery):
         await callback.answer()
         return
 
-    # Имеются подключения
-    text += f"У вас имеется: {len(vpn_connections)} подключений\n\n"
+    if len(vpn_connections):
+        # Имеются подключения
+        text += f"У вас имеется: {len(vpn_connections)} подключений\n\n"
 
     # Смотрим по очереди подключения
     for i, connection in enumerate(vpn_connections, 1):
@@ -62,10 +61,7 @@ async def show_profile(callback: CallbackQuery):
         connection_buttons = []
 
         # Определяем местоположение подключения
-        if server := await Server.get(id=connection.server_id):
-            connection_location = f"{flag.flag(server.country_code)} {server.location}"
-        else:
-            connection_location = "Локация не определена!"
+        server = await Server.get(id=connection.server_id)
 
         # Формируем callback data для продления услуги VPN
         extend_rent_callback = ExtendRentCF(
@@ -73,7 +69,7 @@ async def show_profile(callback: CallbackQuery):
         )
 
         # Информация подключения (состояние)
-        text += f"Подключение {i}: {'🟢' if connection.available else '🔴'}  {connection_location}\n"
+        text += f"Подключение {i}: {'🟢' if connection.available else '🔴'}  {server.verbose_location}\n"
         if connection.available:
             text += (
                 f"Доступно до {connection.available_to.strftime('%Y.%m.%d %H:%M')}\n"

@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import exc
+import flag
+from sqlalchemy import exc, delete
 
 from sqlalchemy.schema import ForeignKey, Column, Table
 from sqlalchemy.types import String, DateTime, Text, Integer
@@ -55,7 +56,6 @@ class ModelAdmin:
     async def delete(self) -> None:
         """
         # Удаляем объект
-        :return:
         """
         async with async_db_session() as session:
             await session.delete(self)
@@ -135,7 +135,11 @@ class User(Base, ModelAdmin):
 
     async def get_connections(self) -> list:
         async with async_db_session() as session:
-            query = select(VPNConnection).where(VPNConnection.user_id == self.id)
+            query = select(VPNConnection).where(
+                VPNConnection.user_id == self.id,
+                VPNConnection.available == True,
+                VPNConnection.available_to != None,
+            )
             connections = await session.execute(query)
 
         return [c for c in connections.scalars()]
@@ -169,6 +173,10 @@ class Server(Base, ModelAdmin):
     country_code: Mapped[str] = mapped_column(String(6))
     vpn_connections: Mapped[list["VPNConnection"]] = relationship()
 
+    @property
+    def verbose_location(self) -> str:
+        return f"{flag.flag(self.country_code)} {self.location}"
+
 
 class VPNConnection(Base, ModelAdmin):
     __tablename__ = "vpn_connections"
@@ -201,8 +209,8 @@ class VPNConnection(Base, ModelAdmin):
 bills_vpn_connections_association_table = Table(
     "bills_vpn_connections",
     Base.metadata,
-    Column("bill_id", ForeignKey("active_bills.id", ondelete="CASCADE")),
-    Column("vpn_conn_id", ForeignKey("vpn_connections.id", ondelete="CASCADE")),
+    Column("bill_id", ForeignKey("active_bills.id")),
+    Column("vpn_conn_id", ForeignKey("vpn_connections.id")),
 )
 
 
@@ -221,3 +229,12 @@ class ActiveBills(Base, ModelAdmin):
     type: Mapped[str] = mapped_column(String(50))
     rent_month: Mapped[int]
     pay_url: Mapped[str] = mapped_column(String(255))
+
+    async def delete(self) -> None:
+        async with async_db_session() as session:
+            query = delete(bills_vpn_connections_association_table).where(
+                ActiveBills.id == self.id
+            )
+            await session.execute(query)
+            await session.delete(self)
+            await session.commit()
