@@ -5,6 +5,8 @@
 
 [@axo_vpn_bot](https://t.me/axo_vpn_bot)
 
+<img src="images/logo.png" width="200" height="200" />
+
 Полностью асинхронный бот для покупки VPN через телеграм 
 
 Написан с использованием:
