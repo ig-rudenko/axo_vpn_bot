@@ -60,31 +60,33 @@ async def payment_manager(period: int = 5):
                         await sc.unfreeze_connection(conn.local_ip)
 
                         if bill.type == "new":
-                            print(
-                                f"# Пользователь {bill.user:<5} |"
-                                f" Новое подключение {conn.local_ip} на {bill.rent_month} мес. до"
-                                f"{conn.available_to + timedelta(days=31 * bill.rent_month)}"
-                            )
                             # Если новое подключение
-                            time_from = datetime.now()
+                            rent_type = "Новое подключение"
 
                         elif bill.type == "extend":
-                            print(
-                                f"# Пользователь {bill.user:<5} |"
-                                f" Продление подключения {conn.local_ip} на {bill.rent_month} мес. до"
-                                f"{conn.available_to + timedelta(days=31 * bill.rent_month)}"
-                            )
                             # Добавляем к текущему времени
-                            time_from = conn.available_to
+                            rent_type = "Продление подключения"
 
                         else:
                             continue
 
+                        # Либо продление, либо новое
+                        rent_time_from = conn.available_to or datetime.now()
+
+                        # Новое время окончания аренды
+                        new_rent_to = rent_time_from + timedelta(
+                            days=31 * bill.rent_month
+                        )
+
+                        print(
+                            f"# Пользователь {bill.user:<5} | {rent_type}"
+                            f" {conn.local_ip} на {bill.rent_month} мес. до {new_rent_to}"
+                        )
+
                         await conn.update(
                             available=True,
                             user_id=bill.user,
-                            available_to=time_from
-                            + timedelta(days=31 * bill.rent_month),
+                            available_to=new_rent_to,
                         )
 
                     await bill.delete()

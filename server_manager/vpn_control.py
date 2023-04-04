@@ -39,11 +39,7 @@ async def vpn_connections_manager(period: int = 60 * 10):
                     continue
 
                 # Если поле available_to меньше текущего времени на 5 дней
-                # и статус подключения активный.
-                if (
-                    connection.available_to < datetime.now() - timedelta(days=5)
-                    and connection.available
-                ):
+                if connection.available_to < datetime.now() - timedelta(days=5):
 
                     server = await Server.get(id=connection.server_id)
                     sc = ServerConnection(server)
@@ -58,8 +54,9 @@ async def vpn_connections_manager(period: int = 60 * 10):
                         await sc.freeze_connection(connection.local_ip)
                         # Вытягиваем из базы объект VPN подключения со всеми полями.
                         config_obj = await VPNConnection.get(id=connection.id)
+
                         # Пересоздаем конфигурацию.
-                        new_config = await sc.regenerate_config(
+                        new_config: ConfigManager = await sc.regenerate_config(
                             ConfigManager(
                                 config=config_obj.config, name=config_obj.client_name
                             )
