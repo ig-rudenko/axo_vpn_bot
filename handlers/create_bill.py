@@ -12,16 +12,17 @@ from db import VPNConnection, async_db_session, ActiveBills, User
 router = Router()
 
 
-async def payment_answer(
-    callback: CallbackQuery, keyboard: InlineKeyboardBuilder, data: dict
-):
+async def payment_answer(callback: CallbackQuery, data: dict):
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="Оплатить", url=data["payUrl"]))
+    keyboard.row(InlineKeyboardButton(text="🔝 Назад", callback_data="start"))
+
     text = (
-        f"Ссылка на оплату через платежную систему Qiwi: "
-        f'<a href="{data["payUrl"]}">Оплатить</a>\nДоступна в течение 10 минут!\n\n'
-        f"Реквизиты банковской карты и регистрационные данные передаются по <b>защищенным протоколам</b> и не "
-        f"попадут в интернет-магазин и третьим лицам.\nПлатежи обрабатываются на защищенной странице процессинга "
-        f'по стандарту <a href="https://ru.wikipedia.org/wiki/PCI_DSS">'
-        f"<b>PCI DSS – Payment Card Industry Data Security Standard.</b></a>"
+        "Ссылка на оплату через платежную систему Qiwi доступна в течение 10 минут!\n\n"
+        "Реквизиты банковской карты и регистрационные данные передаются по <b>защищенным протоколам</b> и не "
+        "попадут в интернет-магазин и третьим лицам.\nПлатежи обрабатываются на защищенной странице процессинга "
+        'по стандарту <a href="https://ru.wikipedia.org/wiki/PCI_DSS">'
+        "<b>PCI DSS – Payment Card Industry Data Security Standard.</b></a>"
     )
 
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
@@ -89,7 +90,6 @@ async def create_bill_for_new_rent(
 
     qiwi_payment = QIWIPayment()
     if data := await qiwi_payment.create_bill(value=callback_data.cost):
-
         # Добавляем счет об оплате
         await ActiveBills.add(
             bill_id=data["billId"],
@@ -102,7 +102,7 @@ async def create_bill_for_new_rent(
         )
 
         # Формируем ответ по оплате
-        await payment_answer(callback, keyboard, data)
+        await payment_answer(callback, data)
 
     else:
         # Если не удалось создать форму оплаты, тогда освобождаем забронированные устройства
@@ -162,7 +162,7 @@ async def create_bill_for_exist_rent(
         )
 
         # Формируем ответ по оплате
-        await payment_answer(callback, keyboard, data)
+        await payment_answer(callback, data)
 
     else:
         # Если не удалось создать форму оплаты, тогда освобождаем забронированные устройства

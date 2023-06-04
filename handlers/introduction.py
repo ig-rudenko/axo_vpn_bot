@@ -1,10 +1,8 @@
-import flag
 from aiogram import Router
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from db import Server
-from .callback_factories import DeviceCountCallbackFactory as DevCountCF
 
 router = Router()
 

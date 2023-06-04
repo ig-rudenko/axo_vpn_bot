@@ -203,7 +203,11 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
     Подтверждение покупки
     """
 
-    keyboard = InlineKeyboardBuilder()
+    keyboard = InlineKeyboardBuilder().row(
+        InlineKeyboardButton(
+            text="Пользовательское соглашение", callback_data="user_agreement"
+        )
+    )
 
     if callback_data.type_ == "extend":
         # Если это продление аренды
@@ -216,19 +220,16 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
             server_id=callback_data.server_id,
         )
 
-        keyboard.add(
-            InlineKeyboardButton(
-                text=f"Оплатить {callback_data.cost} ₽",
-                callback_data=confirm_callback.pack(),
-            )
-        )
         text = (
             f"Продление аренды ⏩\n"
             f"Нажимая кнопку оплатить, Вы соглашаетесь с пользовательским соглашением \n"
-            f"[тут ссылка]"
         )
-        keyboard.add(
-            InlineKeyboardButton(text="✖️Отмена", callback_data="show_profile")
+        keyboard.row(
+            InlineKeyboardButton(
+                text=f"Оплатить {callback_data.cost} ₽",
+                callback_data=confirm_callback.pack(),
+            ),
+            InlineKeyboardButton(text="✖️Отмена", callback_data="show_profile"),
         )
 
     elif callback_data.type_ == "new":
@@ -241,23 +242,24 @@ async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):
             server_id=callback_data.server_id,
         )
         # Новая покупка
-        keyboard.add(
-            InlineKeyboardButton(
-                text=f"Оплатить {callback_data.cost} ₽",
-                callback_data=confirm_callback.pack(),
-            )
-        )
         text = (
             f"Ваше количество устройств: {callback_data.count} 📲\n"
             f"Длительность аренды: {callback_data.month} {month_verbose(callback_data.month)}\n"
             f"Нажимая кнопку оплатить, Вы соглашаетесь с пользовательским соглашением \n"
-            f"[тут должна быть ссылка]"
         )
-        keyboard.add(InlineKeyboardButton(text="✖️Отмена", callback_data="start"))
+        keyboard.row(
+            InlineKeyboardButton(
+                text=f"Оплатить {callback_data.cost} ₽",
+                callback_data=confirm_callback.pack(),
+            ),
+            InlineKeyboardButton(text="✖️Отмена", callback_data="start"),
+        )
 
     else:
         text = "❗Неверные данные❗"
-        keyboard.add(InlineKeyboardButton(text="✖️Отмена", callback_data="start"))
+        keyboard = InlineKeyboardBuilder().add(
+            InlineKeyboardButton(text="✖️Отмена", callback_data="start")
+        )
 
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
     await callback.answer()

@@ -10,15 +10,13 @@ class Base(DeclarativeBase):
 
 class AsyncDatabaseSession:
     def __init__(self):
-
         login = os.getenv("MYSQL_LOGIN")
         password = os.getenv("MYSQL_PASSWORD")
         database = os.getenv("MYSQL_DATABASE")
         host = os.getenv("MYSQL_HOST")
 
         self._engine = create_async_engine(
-            f"mysql+aiomysql://{login}:{password}@{host}/{database}?charset=utf8mb4",
-            # echo=True,  # TODO: DB echo=True
+            f"mysql+aiomysql://{login}:{password}@{host}/{database}?charset=utf8mb4"
         )
         self._session = async_sessionmaker(
             self._engine,
