@@ -12,103 +12,196 @@ from .callback_factories import GetConfigCallbackFactory as GetConfigCF
 router = Router()
 
 
-@router.callback_query(text="show_profile")
-async def show_profile(callback: CallbackQuery):
+class UserProfile:
+    """
+    Для управления пользовательским профилем и просмотром состояния его подключений.
+    """
 
-    # Пользователь
-    user: User = await User.get_or_create(tg_id=callback.from_user.id)
+    def __init__(self, user: User):
+        self._user = user
 
-    # Доступные пользователю VPN подключения
-    vpn_connections: list = await user.get_connections()
+        # Доступные пользователю VPN подключения
+        self._vpn_connections: list[VPNConnection] = []
 
-    # Текущие неоплаченные счета
-    active_bills = await user.get_active_bills()
+        # Текущие неоплаченные счета
+        self._active_bills: list[ActiveBills] = []
 
-    text = ""
-    for bill in active_bills:
-        if bill.type == "new":
-            bill: ActiveBills
-            server = await Server.get(id=bill.vpn_connections[0].server_id)
-            text += (
-                f"⏳ Ожидается оплата:\n"
-                f'<a href="{bill.pay_url}">Форма оплаты</a>'
-                f' доступна до {bill.available_to.strftime("%H:%M:%S")}\n'
-                f"{server.verbose_location} Кол-во: {len(bill.vpn_connections)}"
-            )
+        self._keyboard = InlineKeyboardBuilder()
+        self._text_lines = []
 
-    keyboard = InlineKeyboardBuilder()
+    async def collect_vpn_connections(self):
+        self._vpn_connections = await self._user.get_connections()
 
-    # Если нет подключений у пользователя
-    if not len(vpn_connections) and not len(active_bills):
-        keyboard.add(
+    async def collect_active_bills(self):
+        self._active_bills = await self._user.get_active_bills()
+
+    def get_keyboard(self) -> InlineKeyboardBuilder:
+        """
+        Возвращает набор кнопок для отправки.
+        :return:
+        """
+        return self._keyboard
+
+    def get_text(self) -> str:
+        """
+        Возвращает текст профиля для отправки.
+        """
+        return "\n".join(self._text_lines)
+
+    async def create_profile(self) -> None:
+        """
+        Создаем информацию о профиле пользователя.
+        """
+        if self._user_has_no_data():
+            self._create_empty_user_profile()
+
+        else:
+            await self._create_new_active_bills_info_text()
+            await self._create_text_and_add_buttons_for_users_connections()
+            self._add_button_to_start()
+
+    def _user_has_no_data(self) -> bool:
+        return not len(self._vpn_connections) and not len(self._active_bills)
+
+    def _create_empty_user_profile(self) -> None:
+        self._keyboard.row(
             InlineKeyboardButton(text="Купить", callback_data="choose_location")
         )
-        keyboard.add(InlineKeyboardButton(text="🔙 Назад", callback_data="start"))
-        await callback.message.edit_text(
-            text + "🟠 У вас нет доступных подключений",
-            reply_markup=keyboard.as_markup(),
+        self._add_button_to_start()
+        self._text_lines = ["🟠 У вас нет доступных подключений"]
+
+    def _add_button_to_start(self):
+        self._keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="start"))
+
+    async def _create_new_active_bills_info_text(self) -> None:
+        """
+        Создает описание для новых счетов ожидающих подключение.
+        """
+        for bill in self._active_bills:
+            if bill.type == "new":
+                print(bill.bill_id, bill.vpn_connections)
+                server = await Server.get(id=bill.vpn_connections[0].server_id)
+                self._text_lines.append(
+                    f"⏳ Ожидается оплата:\n"
+                    f"На длительность {bill.rent_month} {month_verbose(bill.rent_month)} "
+                    f"{server.verbose_location}\n"
+                    f"Количество устройств: {len(bill.vpn_connections)}\n"
+                    f'<a href="{bill.pay_url}">Форма оплаты</a>'
+                    f' доступна до {bill.available_to.strftime("%H:%M:%S")}\n'
+                )
+
+    async def _create_text_and_add_buttons_for_users_connections(self) -> None:
+        """
+        Создает информацию обо всех подключениях имеющихся у пользователя.
+        """
+        self._text_lines.append(
+            f"\nУ вас имеется: {len(self._vpn_connections)} подключений\n\n"
         )
-        await callback.answer()
-        return
 
-    if len(vpn_connections):
-        # Имеются подключения
-        text += f"У вас имеется: {len(vpn_connections)} подключений\n\n"
+        # Смотрим по очереди подключения
+        for i, connection in enumerate(self._vpn_connections, 1):
+            buttons_row: list[InlineKeyboardButton] = []
 
-    # Смотрим по очереди подключения
-    for i, connection in enumerate(vpn_connections, 1):
-        connection: VPNConnection
-        connection_buttons = []
+            await self._create_info_for_connection(
+                connection, conn_number=i, buttons_row=buttons_row
+            )
+
+            self._create_text_for_extended_connection(
+                connection, conn_number=i, buttons_row=buttons_row
+            )
+
+            if buttons_row:
+                # Формируем кнопки для данного подключения
+                self._keyboard.row(*buttons_row)
+
+    async def _create_info_for_connection(
+        self,
+        connection: VPNConnection,
+        conn_number: int,
+        buttons_row: list[InlineKeyboardButton],
+    ) -> None:
+        """
+        Добавляет информацию об одном подключении.
+        :param connection: Объект подключения.
+        :param conn_number: Номер в списке по порядку.
+        :param buttons_row: Список для вставки кнопки.
+        """
 
         # Определяем местоположение подключения
-        server = await Server.get(id=connection.server_id)
-
-        # Формируем callback data для продления услуги VPN
-        extend_rent_callback = ExtendRentCF(
-            connection_id=connection.id, server_id=connection.server_id
-        )
+        server: Server = await Server.get(id=connection.server_id)
 
         # Информация подключения (состояние)
-        text += f"Подключение {i}: {'🟢' if connection.available else '🔴'}  {server.verbose_location}\n"
+        self._text_lines.append(
+            f"Подключение {conn_number}: {'🟢' if connection.available else '🔴'}  {server.verbose_location}"
+        )
         if connection.available:
-            text += (
-                f"Доступно до {connection.available_to.strftime('%Y.%m.%d %H:%M')}\n"
+            self._text_lines.append(
+                f"Доступно до {connection.available_to.strftime('%Y.%m.%d %H:%M')}"
             )
-            connection_buttons.append(
+            buttons_row.append(
                 InlineKeyboardButton(
-                    text=f"Подключение {i} - ⚙️ Конфиг",
+                    text=f"Подключение {conn_number} - ⚙️ Конфиг",
                     callback_data=GetConfigCF(connection_id=connection.id).pack(),
                 )
             )
 
+    def _create_text_for_extended_connection(
+        self,
+        connection: VPNConnection,
+        conn_number: int,
+        buttons_row: list[InlineKeyboardButton],
+    ) -> None:
         # Имеется ли информация о продлении данного подключения
-        for bill in active_bills:
+        for bill in self._active_bills:
             conn_ids = [conn.id for conn in bill.vpn_connections]
             if bill.type == "extend" and connection.id in conn_ids:
-                text += (
+                self._text_lines.append(
                     f"Вы уже запросили продление услуги на {bill.rent_month} {month_verbose(bill.rent_month)}\n"
                     f' <a href="{bill.pay_url}">Форма оплаты</a>'
-                    f' доступна до {bill.available_to.strftime("%H:%M:%S")}\n'
+                    f' доступна до {bill.available_to.strftime("%H:%M:%S")}'
                 )
                 break
         else:
+            self._create_button_for_extend(
+                connection, conn_number=conn_number, buttons_row=buttons_row
+            )
+
+    def _create_button_for_extend(
+        self,
+        connection: VPNConnection,
+        conn_number: int,
+        buttons_row: list[InlineKeyboardButton],
+    ) -> None:
+        if not len(self._active_bills):
+            # Формируем callback data для продления услуги VPN
+            extend_rent_callback = ExtendRentCF(
+                connection_id=connection.id,
+                server_id=connection.server_id,
+            )
+
             # Если нет зарегистрированных форм оплаты для данного подключения,
             # то добавляем кнопку продления
-            connection_buttons.append(
+            buttons_row.append(
                 InlineKeyboardButton(
-                    text=f"Подключение {i} - продлить",
+                    text=f"Подключение {conn_number} - продлить",
                     callback_data=extend_rent_callback.pack(),
                 )
             )
 
-        text += "\n"
 
-        if connection_buttons:
-            # Формируем кнопки для данного подключения
-            keyboard.row(*connection_buttons)
+@router.callback_query(text="show_profile")
+async def show_profile(callback: CallbackQuery):
+    user = await User.get_or_create(tg_id=callback.from_user.id)
 
-    keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="start"))
-    await callback.message.edit_text(text, reply_markup=keyboard.as_markup())
+    user_profile = UserProfile(user)
+    await user_profile.collect_vpn_connections()
+    await user_profile.collect_active_bills()
+    await user_profile.create_profile()
+
+    await callback.message.edit_text(
+        text=user_profile.get_text(),
+        reply_markup=user_profile.get_keyboard().as_markup(),
+    )
     await callback.answer()
 
 

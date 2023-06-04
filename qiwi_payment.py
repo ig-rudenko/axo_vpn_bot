@@ -16,7 +16,6 @@ class QIWIPayment:
 
     async def create_bill(self, value: int) -> dict:
 
-        # Время жизни формы оплаты 10 мин
         async with aiohttp.ClientSession() as session:
             response = await session.put(
                 url=f"https://api.qiwi.com/partner/bill/v1/bills/{uuid.uuid4()}",

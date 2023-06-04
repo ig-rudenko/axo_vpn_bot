@@ -1,14 +1,11 @@
 from datetime import datetime
 
 import flag
-from sqlalchemy import exc, delete
-
+from sqlalchemy import exc
 from sqlalchemy.schema import ForeignKey, Column, Table
 from sqlalchemy.types import String, DateTime, Text, Integer
-
 from sqlalchemy.sql import select, insert, update as sqlalchemy_update
 from sqlalchemy.sql.functions import func
-
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.orm.strategy_options import load_only, selectinload
 from sqlalchemy.orm.collections import InstrumentedList
@@ -221,7 +218,9 @@ class ActiveBills(Base, ModelAdmin):
     bill_id: Mapped[str] = mapped_column(String(255))
     user: Mapped[int] = mapped_column(ForeignKey("users.id"))
     vpn_connections: Mapped[list["VPNConnection"]] = relationship(
-        secondary=bills_vpn_connections_association_table, backref="active_bills"
+        secondary=bills_vpn_connections_association_table,
+        backref="active_bills",
+        cascade="save-update, merge, delete",
     )
     available_to: Mapped[datetime] = mapped_column(
         DateTime(), nullable=True, default=None
@@ -229,12 +228,3 @@ class ActiveBills(Base, ModelAdmin):
     type: Mapped[str] = mapped_column(String(50))
     rent_month: Mapped[int]
     pay_url: Mapped[str] = mapped_column(String(255))
-
-    async def delete(self) -> None:
-        async with async_db_session() as session:
-            query = delete(bills_vpn_connections_association_table).where(
-                ActiveBills.id == self.id
-            )
-            await session.execute(query)
-            await session.delete(self)
-            await session.commit()
