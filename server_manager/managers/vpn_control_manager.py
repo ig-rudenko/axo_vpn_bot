@@ -44,7 +44,7 @@ class VPNControlManager(BaseManager):
                 # Необходимо пересоздать подключение и удалить его у пользователя
                 await self._recreate_connection(connection)
 
-            else:
+            elif connection.available_to < datetime.now():
                 # Вышел строк аренды подключения - замораживаем.
                 await self._freeze_connection(connection)
 

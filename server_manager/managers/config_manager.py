@@ -34,7 +34,7 @@ class ConfigManager(BaseManager):
                         await self._create_new_connection(server, config_manager)
 
                     # Если нашли конфигурацию, то проверяем её с текущей на сервере.
-                    elif connection.config != config_manager.config.config_text:
+                    elif connection.config != config_manager.create_config():
                         await self._update_connection(
                             server, connection, config_manager
                         )
@@ -80,4 +80,4 @@ class ConfigManager(BaseManager):
             f"Изменяем конфигурацию для {config_manager.config.client_ip_v4}"
         )
         # Если они отличаются, значит надо изменить конфиг в базе.
-        await conn.update(config=config_manager.config.config_text)
+        await conn.update(config=config_manager.create_config())

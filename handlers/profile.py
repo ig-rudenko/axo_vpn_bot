@@ -95,7 +95,7 @@ class UserProfile:
         Создает информацию обо всех подключениях имеющихся у пользователя.
         """
         self._text_lines.append(
-            f"\nУ вас имеется: {len(self._vpn_connections)} подключений\n\n"
+            f"\nУ вас имеется: {len(self._vpn_connections)} подключений\n"
         )
 
         # Смотрим по очереди подключения
@@ -132,7 +132,7 @@ class UserProfile:
 
         # Информация подключения (состояние)
         self._text_lines.append(
-            f"Подключение {conn_number}: {'🟢' if connection.available else '🔴'}  {server.verbose_location}"
+            f"# {conn_number}: {'🟢' if connection.available else '🔴'}  {server.verbose_location}"
         )
         if connection.available:
             self._text_lines.append(
@@ -140,10 +140,11 @@ class UserProfile:
             )
             buttons_row.append(
                 InlineKeyboardButton(
-                    text=f"Подключение {conn_number} - ⚙️ Конфиг",
+                    text=f"# {conn_number} - ⚙️ Конфиг",
                     callback_data=GetConfigCF(connection_id=connection.id).pack(),
                 )
             )
+        self._text_lines.append("\n")
 
     def _create_text_for_extended_connection(
         self,
@@ -183,7 +184,7 @@ class UserProfile:
             # то добавляем кнопку продления
             buttons_row.append(
                 InlineKeyboardButton(
-                    text=f"Подключение {conn_number} - продлить",
+                    text=f"# {conn_number} - продлить",
                     callback_data=extend_rent_callback.pack(),
                 )
             )
@@ -220,9 +221,10 @@ async def get_user_config(callback: CallbackQuery, callback_data: GetConfigCF):
         return
 
     # Смотрим запрашиваемое подключение
-    connection = await VPNConnection.get(
+    connection: VPNConnection = await VPNConnection.get(
         id=callback_data.connection_id, user_id=user.id
     )
+
     if connection is None or not connection.available or not connection.available_to:
         # Не существует такого подключения у данного пользователя или оно недоступно
         await callback.message.edit_text(
@@ -237,10 +239,11 @@ async def get_user_config(callback: CallbackQuery, callback_data: GetConfigCF):
 
     # Формируем текст конфигурации и её имя как хэш.
     config = connection.config.encode()
-    file_name = hashlib.md5(config).hexdigest()
+    server = await Server.get(id=connection.server_id)
+    file_name = server.name + ".conf"
 
     # Удаляем предыдущее сообщение от бота.
-    await callback.message.delete()
+    # await callback.message.delete()
 
     # Отправляем конфигурационный файл пользователю.
     await callback.message.answer_document(

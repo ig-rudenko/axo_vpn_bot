@@ -46,7 +46,7 @@ class ModelAdmin:
 
         async with async_db_session() as session:
             await session.execute(
-                sqlalchemy_update(VPNConnection), [{"id": self.id, **kwargs}]
+                sqlalchemy_update(self.__class__), [{"id": self.id, **kwargs}]
             )
             await session.commit()
 
@@ -149,7 +149,6 @@ class User(Base, ModelAdmin):
         async with async_db_session() as session:
             query = select(VPNConnection).where(
                 VPNConnection.user_id == self.id,
-                VPNConnection.available == True,
                 VPNConnection.available_to != None,
             )
             connections = await session.execute(query)
@@ -183,7 +182,7 @@ class Server(Base, ModelAdmin):
     password: Mapped[str] = mapped_column(String(50))
     location: Mapped[str] = mapped_column(String(100))
     country_code: Mapped[str] = mapped_column(String(6))
-    vpn_connections: Mapped[list["VPNConnection"]] = relationship(lazy='subquery')
+    vpn_connections: Mapped[list["VPNConnection"]] = relationship(lazy="subquery")
 
     @property
     def verbose_location(self) -> str:
@@ -236,7 +235,7 @@ class ActiveBills(Base, ModelAdmin):
         secondary=bills_vpn_connections_association_table,
         backref="active_bills",
         cascade="save-update, merge, delete",
-        lazy='subquery',
+        lazy="subquery",
     )
     available_to: Mapped[datetime] = mapped_column(
         DateTime(), nullable=True, default=None
