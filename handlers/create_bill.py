@@ -5,7 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from sqlalchemy import update
 
-from qiwi_payment import QIWIPayment
+from payment.qiwi_payment import QIWIPayment
 from .callback_factories import ConfirmPaymentCallbackFactory as ConfirmPaymentCF
 from db import VPNConnection, async_db_session, ActiveBills, User
 

@@ -4,8 +4,10 @@ from datetime import datetime, timedelta, timezone
 
 import aiohttp
 
+from .base import AbstractPayment
 
-class QIWIPayment:
+
+class QIWIPayment(AbstractPayment):
     _token = os.getenv("QIWI_TOKEN")
 
     def __init__(self, currency="RUB", expiration_minutes=10):
@@ -15,7 +17,6 @@ class QIWIPayment:
         self.available_to = current_time + timedelta(minutes=expiration_minutes)
 
     async def create_bill(self, value: int) -> dict:
-
         async with aiohttp.ClientSession() as session:
             response = await session.put(
                 url=f"https://api.qiwi.com/partner/bill/v1/bills/{uuid.uuid4()}",

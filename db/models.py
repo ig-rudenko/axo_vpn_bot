@@ -59,47 +59,59 @@ class ModelAdmin:
             await session.commit()
 
     @classmethod
-    async def get(cls, **kwargs):
+    async def get(cls, select_in_load: str | None = None, **kwargs):
         """
-        # Возвращаем одну запись, которая удовлетворяет введенным параметрам
-        :param kwargs: поля и значения
-        :return: Объект или None
+        # Возвращаем одну запись, которая удовлетворяет введенным параметрам.
+
+        :param select_in_load: Загрузить сразу связанную модель.
+        :param kwargs: Поля и значения.
+        :return: Объект или None.
         """
 
         params = [getattr(cls, key) == val for key, val in kwargs.items()]
         query = select(cls).where(*params)
+
+        if select_in_load:
+            query.options(selectinload(getattr(cls, select_in_load)))
+
         try:
             async with async_db_session() as session:
                 results = await session.execute(query)
                 (result,) = results.one()
-                result: cls
                 return result
         except exc.NoResultFound:
             return None
 
     @classmethod
-    async def filter(cls, **kwargs):
+    async def filter(cls, select_in_load: str | None = None, **kwargs):
         """
-        # Возвращаем все записи, которые удовлетворяют фильтру
-        :param kwargs: поля и значения
+        # Возвращаем все записи, которые удовлетворяют фильтру.
+
+        :param select_in_load: Загрузить сразу связанную модель.
+        :param kwargs: Поля и значения.
         :return: ScalarResult, если нашли записи и пустой tuple, если нет
         """
 
         params = [getattr(cls, key) == val for key, val in kwargs.items()]
         query = select(cls).where(*params)
+
+        if select_in_load:
+            query.options(selectinload(getattr(cls, select_in_load)))
+
         try:
             async with async_db_session() as session:
                 results = await session.execute(query)
-                return results.scalars()
+                return results.scalars().all()
         except exc.NoResultFound:
             return ()
 
     @classmethod
-    async def all(cls, values=None):
+    async def all(cls, select_in_load: str | None = None, values=None):
         """
         # Получаем все записи
-        :param values: Список полей, которые надо вернуть, если нет, то все (default None)
-        :return: ScalarResult записей
+
+        :param select_in_load: Загрузить сразу связанную модель.
+        :param values: Список полей, которые надо вернуть, если нет, то все (default None).
         """
 
         if values and isinstance(values, list):
@@ -110,9 +122,12 @@ class ModelAdmin:
             # Все поля
             query = select(cls)
 
+        if select_in_load:
+            query.options(selectinload(getattr(cls, select_in_load)))
+
         async with async_db_session() as session:
             result = await session.execute(query)
-            return result.scalars()
+            return result.scalars().all()
 
 
 class User(Base, ModelAdmin):
@@ -168,7 +183,7 @@ class Server(Base, ModelAdmin):
     password: Mapped[str] = mapped_column(String(50))
     location: Mapped[str] = mapped_column(String(100))
     country_code: Mapped[str] = mapped_column(String(6))
-    vpn_connections: Mapped[list["VPNConnection"]] = relationship()
+    vpn_connections: Mapped[list["VPNConnection"]] = relationship(lazy='subquery')
 
     @property
     def verbose_location(self) -> str:
@@ -221,6 +236,7 @@ class ActiveBills(Base, ModelAdmin):
         secondary=bills_vpn_connections_association_table,
         backref="active_bills",
         cascade="save-update, merge, delete",
+        lazy='subquery',
     )
     available_to: Mapped[datetime] = mapped_column(
         DateTime(), nullable=True, default=None
