@@ -1,9 +1,8 @@
-import hashlib
-
 from aiogram import Router
 from aiogram.types import InlineKeyboardButton, CallbackQuery, BufferedInputFile
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from helpers.bot_answers_shortcuts import send_technical_error
 from .callback_factories import ExtendRentCallbackFactory as ExtendRentCF
 from db import VPNConnection, ActiveBills, User, Server
 from .buy_service import month_verbose
@@ -79,8 +78,11 @@ class UserProfile:
         """
         for bill in self._active_bills:
             if bill.type == "new":
-                print(bill.bill_id, bill.vpn_connections)
-                server = await Server.get(id=bill.vpn_connections[0].server_id)
+                try:
+                    server = await Server.get(id=bill.vpn_connections[0].server_id)
+                except Server.DoesNotExists:
+                    continue
+
                 self._text_lines.append(
                     f"⏳ Ожидается оплата:\n"
                     f"На длительность {bill.rent_month} {month_verbose(bill.rent_month)} "
@@ -128,7 +130,10 @@ class UserProfile:
         """
 
         # Определяем местоположение подключения
-        server: Server = await Server.get(id=connection.server_id)
+        try:
+            server = await Server.get(id=connection.server_id)
+        except Server.DoesNotExists:
+            return
 
         # Информация подключения (состояние)
         self._text_lines.append(
@@ -209,38 +214,36 @@ async def show_profile(callback: CallbackQuery):
 
 @router.callback_query(GetConfigCF.filter())
 async def get_user_config(callback: CallbackQuery, callback_data: GetConfigCF):
-    keyboard = InlineKeyboardBuilder()
-    keyboard.row(InlineKeyboardButton(text="🔝 На главную", callback_data="start"))
-
-    user = await User.get(tg_id=callback.from_user.id)
-    if user is None:
+    try:
+        user = await User.get(tg_id=callback.from_user.id)
+    except User.DoesNotExists:
         # Не существует пользователя
-        await callback.message.edit_text(
-            "❗️У вас нет доступных конфигурации❗️", reply_markup=keyboard.as_markup()
-        )
-        await callback.answer()
+        await send_technical_error(callback, "❗️У вас нет доступных конфигурации❗️")
         return
 
-    # Смотрим запрашиваемое подключение
-    connection: VPNConnection = await VPNConnection.get(
-        id=callback_data.connection_id, user_id=user.id
-    )
-
-    if connection is None or not connection.available or not connection.available_to:
-        # Не существует такого подключения у данного пользователя или оно недоступно
-        await callback.message.edit_text(
-            "❗Неверная конфигурация❗️", reply_markup=keyboard.as_markup()
+    try:
+        # Смотрим запрашиваемое подключение
+        connection: VPNConnection = await VPNConnection.get(
+            id=callback_data.connection_id, user_id=user.id
         )
-        await callback.answer()
+        if not connection.available or not connection.available_to:
+            await send_technical_error(
+                callback, "❗️Данное подключение вам недоступно❗️"
+            )
+            return
+    except VPNConnection.DoesNotExists:
+        await send_technical_error(callback, "❗Неверная конфигурация❗️")
         return
 
-    # Конфигурация пользователя найдена
-    keyboard = InlineKeyboardBuilder()
-    keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="show_profile"))
+    try:
+        server = await Server.get(id=connection.server_id)
+    except Server.DoesNotExists:
+        await send_technical_error(callback, "❗Сервер больше не существует❗️")
+        return
 
-    # Формируем текст конфигурации и её имя как хэш.
+    # Конфигурация пользователя найдена.
+    # Формируем текст конфигурации и её имя как название сервера.
     config = connection.config.encode()
-    server = await Server.get(id=connection.server_id)
     file_name = server.name + ".conf"
 
     # Удаляем предыдущее сообщение от бота.
@@ -251,6 +254,8 @@ async def get_user_config(callback: CallbackQuery, callback_data: GetConfigCF):
         BufferedInputFile(bytes(config), filename=file_name),
         caption=f"Не изменяйте содержимое файла, во избежание нестабильной работы",
     )
+    keyboard = InlineKeyboardBuilder()
+    keyboard.row(InlineKeyboardButton(text="🔙 Назад", callback_data="show_profile"))
     await callback.message.answer(
         text=f"Вернуться в профиль", reply_markup=keyboard.as_markup()
     )

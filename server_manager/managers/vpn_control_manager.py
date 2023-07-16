@@ -19,7 +19,7 @@ class VPNControlManager(BaseManager):
 
     async def task(self):
         # Вытягиваем из базы все VPN подключения, но без поля конфигурации.
-        all_connections: list[VPNConnection] = await VPNConnection.all(
+        all_connections = await VPNConnection.all(
             values=[
                 "server_id",
                 "user_id",
@@ -56,7 +56,11 @@ class VPNControlManager(BaseManager):
             )
 
     async def _recreate_connection(self, connection: VPNConnection):
-        server = await Server.get(id=connection.server_id)
+        try:
+            server = await Server.get(id=connection.server_id)
+        except Server.DoesNotExists:
+            return
+
         sc = ServerConnection(server)
         await sc.connect()
 
@@ -69,7 +73,10 @@ class VPNControlManager(BaseManager):
             # Замораживаем подключение, на всякий случай.
             await sc.freeze_connection(connection.local_ip)
             # Вытягиваем из базы объект VPN подключения со всеми полями.
-            config_obj = await VPNConnection.get(id=connection.id)
+            try:
+                config_obj = await VPNConnection.get(id=connection.id)
+            except VPNConnection.DoesNotExists:
+                return
 
             # Пересоздаем конфигурацию.
             new_config = await sc.regenerate_config(
@@ -92,7 +99,11 @@ class VPNControlManager(BaseManager):
             await connection.update(user_id=None, available_to=None, available=False)
 
     async def _freeze_connection(self, connection: VPNConnection):
-        server = await Server.get(id=connection.server_id)
+        try:
+            server = await Server.get(id=connection.server_id)
+        except Server.DoesNotExists:
+            return
+
         sc = ServerConnection(server)
         await sc.connect()
 

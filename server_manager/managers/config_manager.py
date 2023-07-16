@@ -18,26 +18,26 @@ class ConfigManager(BaseManager):
             await asyncio.sleep(self.timeout)
 
     async def task(self):
-        all_servers: list[Server] = await Server.all()
-
-        for server in all_servers:
+        for server in await Server.all():
             self.logger.info(f"Смотрим сервер {server.name} {server.location}")
             try:
                 config_files = await self._get_server_config_files(server)
+
                 for config_manager in config_files:
                     # Пытаемся найти в базе текущую конфигурацию
-                    connection: VPNConnection = await VPNConnection.get(
-                        server_id=server.id, local_ip=config_manager.config.client_ip_v4
-                    )
-
-                    if connection is None:
-                        await self._create_new_connection(server, config_manager)
-
-                    # Если нашли конфигурацию, то проверяем её с текущей на сервере.
-                    elif connection.config != config_manager.create_config():
-                        await self._update_connection(
-                            server, connection, config_manager
+                    try:
+                        connection = await VPNConnection.get(
+                            server_id=server.id,
+                            local_ip=config_manager.config.client_ip_v4,
                         )
+                        # Если нашли конфигурацию, то проверяем её с текущей на сервере.
+                        if connection.config != config_manager.create_config():
+                            await self._update_connection(
+                                server, connection, config_manager
+                            )
+
+                    except VPNConnection.DoesNotExists:
+                        await self._create_new_connection(server, config_manager)
 
             except Exception as exc:
                 self.logger.error(
@@ -62,7 +62,7 @@ class ConfigManager(BaseManager):
             f"# Север: {server.name:<15} | "
             f"Добавляем конфигурацию для {config_manager.config.client_ip_v4}"
         )
-        await VPNConnection.create(
+        await VPNConnection.add(
             server_id=server.id,
             user_id=None,
             available=False,

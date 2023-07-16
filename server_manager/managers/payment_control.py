@@ -62,6 +62,7 @@ class PaymentManager(BaseManager):
         self.logger.info(f"# Пользователь {bill.user:<5} | Счет отклонен")
         # Забронированные за пользователем подключения надо освободить.
         for conn in bill.vpn_connections:
+            conn: VPNConnection
             await conn.update(user_id=None, available_to=None, available=False)
 
         await bill.delete()
@@ -72,8 +73,13 @@ class PaymentManager(BaseManager):
 
         for conn in bill.vpn_connections:
             conn: VPNConnection
+
             # Выбираем сервер, на котором необходимо активировать подключения
-            sc = ServerConnection(await Server.get(id=conn.server_id))
+            try:
+                sc = ServerConnection(await Server.get(id=conn.server_id))
+            except Server.DoesNotExists:
+                continue
+
             await sc.connect()
             # Размораживаем подключение на сервере
             await sc.unfreeze_connection(conn.local_ip)

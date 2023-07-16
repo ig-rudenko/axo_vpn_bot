@@ -5,6 +5,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from sqlalchemy import update
 
+from helpers.bot_answers_shortcuts import send_technical_error
 from payment.qiwi_payment import QIWIPayment
 from .callback_factories import ConfirmPaymentCallbackFactory as ConfirmPaymentCF
 from db import VPNConnection, async_db_session, ActiveBills, User
@@ -86,7 +87,7 @@ async def create_bill_for_new_rent(
         await session.commit()
 
     # Пользователь
-    user: User = await User.get_or_create(tg_id=callback.from_user.id)
+    user = await User.get_or_create(tg_id=callback.from_user.id)
 
     qiwi_payment = QIWIPayment()
     if data := await qiwi_payment.create_bill(value=callback_data.cost):
@@ -116,11 +117,7 @@ async def create_bill_for_new_rent(
             )
             await session.commit()
 
-        await callback.message.edit_text(
-            "Технические неполадки, проносим свои извинения ☹️",
-            reply_markup=keyboard.as_markup(),
-        )
-        await callback.answer()
+        await send_technical_error(callback)
 
 
 @router.callback_query(ConfirmPaymentCF.filter(F.type_ == "extend"))
@@ -151,6 +148,13 @@ async def create_bill_for_exist_rent(
     qiwi_payment = QIWIPayment()
     if data := await qiwi_payment.create_bill(value=callback_data.cost):
         # Добавляем счет об оплате
+
+        try:
+            connection = await VPNConnection.get(id=callback_data.connection_id)
+        except VPNConnection.DoesNotExists:
+            await send_technical_error(callback, text="Подключение не было найдено! ☹️")
+            return
+
         await ActiveBills.add(
             bill_id=data["billId"],
             user=user.id,
@@ -158,17 +162,12 @@ async def create_bill_for_exist_rent(
             type="extend",
             rent_month=callback_data.month,
             pay_url=data["payUrl"],
-            vpn_connections=[await VPNConnection.get(id=callback_data.connection_id)],
+            vpn_connections=[connection],
         )
 
         # Формируем ответ по оплате
         await payment_answer(callback, data)
 
     else:
-        # Если не удалось создать форму оплаты, тогда освобождаем забронированные устройства
-        # await unpause_devs(user_devs_ids)
-        await callback.message.edit_text(
-            "Технические неполадки, проносим свои извинения ☹️",
-            reply_markup=keyboard.as_markup(),
-        )
-        await callback.answer()
+        # Если не удалось создать форму оплаты
+        await send_technical_error(callback)

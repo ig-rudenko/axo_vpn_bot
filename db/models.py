@@ -1,40 +1,45 @@
 from datetime import datetime
+from typing import TypeVar, Generic, Sequence
 
 import flag
 from sqlalchemy import exc
 from sqlalchemy.schema import ForeignKey, Column, Table
 from sqlalchemy.types import String, DateTime, Text, Integer
-from sqlalchemy.sql import select, insert, update as sqlalchemy_update
+from sqlalchemy.sql import select, update as sqlalchemy_update
 from sqlalchemy.sql.functions import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.orm.strategy_options import load_only, selectinload
-from sqlalchemy.orm.collections import InstrumentedList
 
 from .db_connector import Base, async_db_session
 
 
-class ModelAdmin:
+T = TypeVar("T")
+
+
+class ModelAdmin(Generic[T]):
     class DoesNotExists(Exception):
         pass
 
     @classmethod
-    async def create(cls, **kwargs) -> int:
+    async def create(cls, **kwargs) -> T:
         """
-        # Создаем новый объект
-        :param kwargs: Поля и значения для объекта
-        :return: Идентификатор PK
+        # Создает новый объект и возвращает его.
+        :param kwargs: Поля и значения для объекта.
+        :return: Созданный объект.
         """
 
         async with async_db_session() as session:
-            res = await session.execute(insert(cls).values(**kwargs))
+            obj = cls(**kwargs)
+            session.add(obj)
             await session.commit()
-            return res.lastrowid
+            await session.refresh(obj)
+            return obj
 
     @classmethod
     async def add(cls, **kwargs) -> None:
         """
-        # Добавляем новый объект
-        :param kwargs: Поля и значения для объекта
+        # Создает новый объект.
+        :param kwargs: Поля и значения для объекта.
         """
 
         async with async_db_session() as session:
@@ -43,8 +48,8 @@ class ModelAdmin:
 
     async def update(self, **kwargs) -> None:
         """
-        # Обновляем текущий объект
-        :param kwargs: поля и значения, которые надо поменять
+        # Обновляет текущий объект.
+        :param kwargs: Поля и значения, которые надо поменять.
         """
 
         async with async_db_session() as session:
@@ -55,20 +60,20 @@ class ModelAdmin:
 
     async def delete(self) -> None:
         """
-        # Удаляем объект
+        # Удаляет объект.
         """
         async with async_db_session() as session:
             await session.delete(self)
             await session.commit()
 
     @classmethod
-    async def get(cls, select_in_load: str | None = None, **kwargs):
+    async def get(cls, select_in_load: str | None = None, **kwargs) -> T:
         """
-        # Возвращаем одну запись, которая удовлетворяет введенным параметрам.
+        # Возвращает одну запись, которая удовлетворяет введенным параметрам.
 
         :param select_in_load: Загрузить сразу связанную модель.
         :param kwargs: Поля и значения.
-        :return: Объект или None.
+        :return: Объект или вызовет исключение DoesNotExists.
         """
 
         params = [getattr(cls, key) == val for key, val in kwargs.items()]
@@ -83,16 +88,16 @@ class ModelAdmin:
                 (result,) = results.one()
                 return result
         except exc.NoResultFound:
-            return None
+            raise cls.DoesNotExists
 
     @classmethod
-    async def filter(cls, select_in_load: str | None = None, **kwargs):
+    async def filter(cls, select_in_load: str | None = None, **kwargs) -> Sequence[T]:
         """
-        # Возвращаем все записи, которые удовлетворяют фильтру.
+        # Возвращает все записи, которые удовлетворяют фильтру.
 
         :param select_in_load: Загрузить сразу связанную модель.
         :param kwargs: Поля и значения.
-        :return: ScalarResult, если нашли записи и пустой tuple, если нет
+        :return: Перечень записей.
         """
 
         params = [getattr(cls, key) == val for key, val in kwargs.items()]
@@ -109,9 +114,11 @@ class ModelAdmin:
             return ()
 
     @classmethod
-    async def all(cls, select_in_load: str | None = None, values=None):
+    async def all(
+        cls, select_in_load: str = None, values: list[str] = None
+    ) -> Sequence[T]:
         """
-        # Получаем все записи
+        # Получает все записи.
 
         :param select_in_load: Загрузить сразу связанную модель.
         :param values: Список полей, которые надо вернуть, если нет, то все (default None).
@@ -143,12 +150,13 @@ class User(Base, ModelAdmin):
 
     @classmethod
     async def get_or_create(cls, tg_id: int) -> "User":
-        user: User = await User.get(tg_id=tg_id)
-        if user is None:
-            user: User = await User.get(id=await User.create(tg_id=tg_id))
+        try:
+            user = await User.get(tg_id=tg_id)
+        except cls.DoesNotExists:
+            user = await User.create(tg_id=tg_id)
         return user
 
-    async def get_connections(self) -> list:
+    async def get_connections(self) -> Sequence["VPNConnection"]:
         async with async_db_session() as session:
             query = select(VPNConnection).where(
                 VPNConnection.user_id == self.id,
@@ -156,9 +164,9 @@ class User(Base, ModelAdmin):
             )
             connections = await session.execute(query)
 
-        return [c for c in connections.scalars()]
+        return connections.scalars().all()
 
-    async def get_active_bills(self) -> InstrumentedList:
+    async def get_active_bills(self) -> Sequence["ActiveBills"]:
         async with async_db_session() as session:
             query = (
                 select(User)

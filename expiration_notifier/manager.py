@@ -1,13 +1,15 @@
 import asyncio
 from datetime import datetime, timedelta, time, date
+from typing import Literal
 
 from db import VPNConnection, User, Server
+from db.models import ModelAdmin
 from .base import AbstractNotifier
 
 
 class ExpirationManager:
     expiration_limit_timedelta = timedelta(days=5)
-    notifier_time = time(hour=13, minute=0, second=0)
+    notifier_time = time(hour=21, minute=1, second=0)
 
     def __init__(self, notifiers: list[AbstractNotifier]):
         self._notifiers = notifiers
@@ -18,7 +20,7 @@ class ExpirationManager:
             if self.is_time_to_check():
                 await self._check_vpn_connections()
                 self._last_day_checked = date.today()
-            asyncio.timeout(60 * 2)
+            await asyncio.sleep(60 * 2)
 
     def is_time_to_check(self) -> bool:
         if self._last_day_checked == date.today():
@@ -43,13 +45,13 @@ class ExpirationManager:
                     - datetime.now()
                 ).days
 
-                await self._notify_connection_expired(conn, days_to_delete)
+                await self._notify("connection_expired", conn, days_to_delete)
 
             elif conn.available_to <= datetime.now() + self.expiration_limit_timedelta:
                 # Если подключение скоро истечет
                 days_left = (conn.available_to - datetime.now()).days
 
-                await self._notify_soon_expired(conn, days_left)
+                await self._notify("soon_expired", conn, days_left)
 
     @staticmethod
     async def get_user_and_server(conn: VPNConnection) -> tuple[User, Server]:
@@ -58,14 +60,19 @@ class ExpirationManager:
 
         return user, server
 
-    async def _notify_connection_expired(self, conn: VPNConnection, days_to_delete):
-        user, server = await self.get_user_and_server(conn)
+    async def _notify(
+        self,
+        mode: Literal["connection_expired", "soon_expired"],
+        conn: VPNConnection,
+        days_to_delete,
+    ):
+        try:
+            user, server = await self.get_user_and_server(conn)
+        except ModelAdmin.DoesNotExists:
+            return
 
-        for notifier in self._notifiers:
-            await notifier.notify_connection_expired(user, server, conn, days_to_delete)
-
-    async def _notify_soon_expired(self, conn: VPNConnection, days_left):
-        user, server = await self.get_user_and_server(conn)
-
-        for notifier in self._notifiers:
-            await notifier.notify_soon_expired(user, server, conn, days_left)
+        else:
+            for notifier in self._notifiers:
+                await getattr(notifier, f"notify_{mode}")(
+                    user, server, conn, days_to_delete
+                )

@@ -188,6 +188,7 @@ async def extend_rent(callback: CallbackQuery, callback_data: ExtendRentCF):
     )
     await callback.answer()
 
+
 # СОГЛАСИЕ НА ПОКУПКУ
 @router.callback_query(BuyCF.filter())
 async def confirm_payment(callback: CallbackQuery, callback_data: BuyCF):

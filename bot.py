@@ -16,6 +16,14 @@ from expiration_notifier.manager import ExpirationManager
 from expiration_notifier.notifier import TgBotNotifier
 
 
+async def notify(bot: Bot):
+    try:
+        notifiers = [TgBotNotifier(bot)]
+        await ExpirationManager(notifiers).run()
+    except Exception as exc:
+        logging.error("Ошибка ExpirationManager", exc_info=exc)
+
+
 async def on_startup(dispatcher: Dispatcher, bot: Bot):
     await bot.set_webhook(
         f"{settings.BASE_URL}{settings.BOT_PATH}",
@@ -26,6 +34,9 @@ async def on_startup(dispatcher: Dispatcher, bot: Bot):
     webhook = await bot.get_webhook_info()
     print("======== SET WEBHOOK ========")
     print(webhook)
+
+    # Запускаем проверку подключений и отправку уведомлений
+    asyncio.get_event_loop().create_task(notify(bot))
 
 
 async def on_shutdown(dispatcher: Dispatcher, bot: Bot):
@@ -39,14 +50,6 @@ def add_routes(dispatcher: Dispatcher):
     dispatcher.include_router(profile.router)
     dispatcher.include_router(create_bill.router)
     dispatcher.include_router(user_agreement.router)
-
-
-async def notify(bot: Bot):
-    try:
-        notifiers = [TgBotNotifier(bot)]
-        await ExpirationManager(notifiers).run()
-    except Exception as exc:
-        logging.error("Ошибка ExpirationManager", exc_info=exc)
 
 
 def main():
@@ -64,11 +67,8 @@ def main():
     app = web.Application()
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=settings.BOT_PATH)
     setup_application(app, dp, bot=bot)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(notify(bot))
-    web.run_app(
-        app, host=settings.WEB_SERVER_HOST, port=settings.WEB_SERVER_PORT, loop=loop
-    )
+
+    web.run_app(app, host=settings.WEB_SERVER_HOST, port=settings.WEB_SERVER_PORT)
 
 
 if __name__ == "__main__":
