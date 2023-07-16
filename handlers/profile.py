@@ -132,7 +132,8 @@ class UserProfile:
 
         # Информация подключения (состояние)
         self._text_lines.append(
-            f"# {conn_number}: {'🟢' if connection.available else '🔴'}  {server.verbose_location}"
+            f"# {conn_number}: {'🟢' if connection.available else '🔴'}  {server.verbose_location}\n"
+            f"{connection.local_ip}"
         )
         if connection.available:
             self._text_lines.append(

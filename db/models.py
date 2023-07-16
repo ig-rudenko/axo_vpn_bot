@@ -14,6 +14,9 @@ from .db_connector import Base, async_db_session
 
 
 class ModelAdmin:
+    class DoesNotExists(Exception):
+        pass
+
     @classmethod
     async def create(cls, **kwargs) -> int:
         """

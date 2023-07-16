@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from aiogram.dispatcher.webhook.aiohttp_server import (
@@ -8,9 +9,11 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.types.input_file import FSInputFile
 from aiogram.client.session.aiohttp import AiohttpSession
-from handlers import introduction, buy_service, create_bill, profile, user_agreement
 
 import settings
+from handlers import introduction, buy_service, create_bill, profile, user_agreement
+from expiration_notifier.manager import ExpirationManager
+from expiration_notifier.notifier import TgBotNotifier
 
 
 async def on_startup(dispatcher: Dispatcher, bot: Bot):
@@ -38,6 +41,14 @@ def add_routes(dispatcher: Dispatcher):
     dispatcher.include_router(user_agreement.router)
 
 
+async def notify(bot: Bot):
+    try:
+        notifiers = [TgBotNotifier(bot)]
+        await ExpirationManager(notifiers).run()
+    except Exception as exc:
+        logging.error("Ошибка ExpirationManager", exc_info=exc)
+
+
 def main():
     session = AiohttpSession()
     bot_settings = {"session": session, "parse_mode": "HTML"}
@@ -53,7 +64,11 @@ def main():
     app = web.Application()
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=settings.BOT_PATH)
     setup_application(app, dp, bot=bot)
-    web.run_app(app, host=settings.WEB_SERVER_HOST, port=settings.WEB_SERVER_PORT)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(notify(bot))
+    web.run_app(
+        app, host=settings.WEB_SERVER_HOST, port=settings.WEB_SERVER_PORT, loop=loop
+    )
 
 
 if __name__ == "__main__":

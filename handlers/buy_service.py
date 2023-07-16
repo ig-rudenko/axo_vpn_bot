@@ -4,6 +4,7 @@ from aiogram.types import InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from db import Server
+from helpers.verbose_numbers import month_verbose
 from .callback_factories import (
     DeviceCountCallbackFactory as DevCountCF,
     BuyCallbackFactory as BuyCF,
@@ -186,15 +187,6 @@ async def extend_rent(callback: CallbackQuery, callback_data: ExtendRentCF):
         text="Выберите период аренды", reply_markup=keyboard.as_markup()
     )
     await callback.answer()
-
-
-def month_verbose(month: int) -> str:
-    if month == 1:
-        return "месяц"
-    elif month <= 4:
-        return "месяца"
-    return "месяцев"
-
 
 # СОГЛАСИЕ НА ПОКУПКУ
 @router.callback_query(BuyCF.filter())
