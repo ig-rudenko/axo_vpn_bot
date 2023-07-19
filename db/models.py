@@ -2,11 +2,10 @@ from datetime import datetime
 from typing import TypeVar, Generic, Sequence
 
 import flag
-from sqlalchemy import exc
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.schema import ForeignKey, Column, Table
 from sqlalchemy.types import String, DateTime, Text, Integer
 from sqlalchemy.sql import select, update as sqlalchemy_update
-from sqlalchemy.sql.functions import func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.orm.strategy_options import load_only, selectinload
 
@@ -87,7 +86,7 @@ class ModelAdmin(Generic[T]):
                 results = await session.execute(query)
                 (result,) = results.one()
                 return result
-        except exc.NoResultFound:
+        except NoResultFound:
             raise cls.DoesNotExists
 
     @classmethod
@@ -110,7 +109,7 @@ class ModelAdmin(Generic[T]):
             async with async_db_session() as session:
                 results = await session.execute(query)
                 return results.scalars().all()
-        except exc.NoResultFound:
+        except NoResultFound:
             return ()
 
     @classmethod
@@ -208,9 +207,7 @@ class VPNConnection(Base, ModelAdmin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     available: Mapped[bool]
     local_ip: Mapped[str] = mapped_column(String(15))
-    available_to: Mapped[datetime] = mapped_column(
-        server_default=func.now(), nullable=True
-    )
+    available_to: Mapped[datetime] = mapped_column(nullable=True)
     config: Mapped[str] = mapped_column(Text())
     client_name: Mapped[str] = mapped_column(String(30))
 
@@ -245,7 +242,6 @@ class ActiveBills(Base, ModelAdmin):
     vpn_connections: Mapped[list["VPNConnection"]] = relationship(
         secondary=bills_vpn_connections_association_table,
         backref="active_bills",
-        cascade="save-update, merge, delete",
         lazy="subquery",
     )
     available_to: Mapped[datetime] = mapped_column(
@@ -254,3 +250,14 @@ class ActiveBills(Base, ModelAdmin):
     type: Mapped[str] = mapped_column(String(50))
     rent_month: Mapped[int]
     pay_url: Mapped[str] = mapped_column(String(255))
+
+    async def delete(self) -> None:
+        """
+        # Удаляет объект.
+        """
+        async with async_db_session() as session:
+            active_bill = await session.get(ActiveBills, self.id)
+            for conn in active_bill.vpn_connections:
+                active_bill.vpn_connections.remove(conn)
+            await session.delete(active_bill)
+            await session.commit()

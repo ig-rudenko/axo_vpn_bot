@@ -24,6 +24,9 @@ class ConfigManager(BaseManager):
                 config_files = await self._get_server_config_files(server)
 
                 for config_manager in config_files:
+                    if not config_manager.config.client_ip_v4:
+                        continue
+
                     # Пытаемся найти в базе текущую конфигурацию
                     try:
                         connection = await VPNConnection.get(

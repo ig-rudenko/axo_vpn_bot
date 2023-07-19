@@ -1,10 +1,14 @@
+import logging
 from abc import ABC, abstractmethod
 
 import asyncssh
 from asyncssh import SSHClientConnection
+from asyncssh.logging import logger
 
 from db.models import Server
 from ..configuration.base import BaseConfigBuilder
+
+logger.setLevel(level=logging.ERROR)
 
 
 class ServerConnectionBase(ABC):

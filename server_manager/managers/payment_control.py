@@ -1,8 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
 
-from sqlalchemy import inspect
-
 from payment.base import AbstractPayment
 from payment.qiwi_payment import QIWIPayment
 from db import ActiveBills, VPNConnection, Server
@@ -41,14 +39,18 @@ class PaymentManager(BaseManager):
 
     async def _processing_bill(self, bill: ActiveBills):
         status = await self._qiwi.check_bill_status(bill.bill_id)
+        print(status)
 
         if status is None:
             # Слишком много запросов на QIWI
             await asyncio.sleep(10)
 
         # Счет отклонен или истек срок действия формы и это новое подключение.
-        elif status in ["REJECTED", "EXPIRED"] and bill.type == "new":
-            await self._reject_bill(bill)
+        elif status in ["REJECTED", "EXPIRED"]:
+            if bill.type == "new":
+                await self._reject_bill(bill)
+            else:
+                await bill.delete()
 
         # Счет был оплачен
         elif status == "PAID":

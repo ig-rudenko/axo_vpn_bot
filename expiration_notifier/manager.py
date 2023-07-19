@@ -9,7 +9,7 @@ from .base import AbstractNotifier
 
 class ExpirationManager:
     expiration_limit_timedelta = timedelta(days=5)
-    notifier_time = time(hour=21, minute=1, second=0)
+    notifier_time = time(hour=19, minute=31, second=0)
 
     def __init__(self, notifiers: list[AbstractNotifier]):
         self._notifiers = notifiers

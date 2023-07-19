@@ -1,3 +1,36 @@
+"""
+Данный код представляет собой менеджер для обработки аренды VPN подключений. Он выполняет следующие задачи:
+
+1. В бесконечном цикле получает все VPN подключения из базы данных без поля конфигурации.
+
+2. Для каждого подключения вызывает метод _process_connection(), который обрабатывает данное подключение.
+
+3. В методе _process_connection() проверяется, активно ли подключение.
+   Если нет, то происходит одно из следующих действий:
+
+    - Если время окончания аренды подключения меньше текущего времени на 5 дней, подключение пересоздается и
+      удаляется у пользователя.
+    - Если время окончания аренды подключения прошло, подключение замораживается.
+
+4. Метод _recreate_connection() пересоздает подключение, если время окончания аренды подключения меньше
+   текущего времени на 5 дней. Он выполняет следующие действия:
+
+    - Получает объект сервера по его идентификатору из базы данных.
+    - Создает подключение к серверу.
+    - Замораживает текущее подключение.
+    - Получает объект VPN подключения со всеми полями из базы данных.
+    - Пересоздает конфигурацию подключения.
+    - Обновляет конфигурацию в базе данных.
+
+5. Метод _freeze_connection() замораживает подключение, если время окончания аренды подключения прошло.
+   Он выполняет следующие действия:
+
+    - Получает объект сервера по его идентификатору из базы данных.
+    - Создает подключение к серверу.
+    - Замораживает текущее подключение.
+    - Обновляет статус доступности подключения в базе данных.
+"""
+
 import asyncio
 from datetime import datetime, timedelta
 
@@ -74,9 +107,11 @@ class VPNControlManager(BaseManager):
             await sc.freeze_connection(connection.local_ip)
             # Вытягиваем из базы объект VPN подключения со всеми полями.
             try:
-                config_obj = await VPNConnection.get(id=connection.id)
+                config_obj: VPNConnection = await VPNConnection.get(id=connection.id)
             except VPNConnection.DoesNotExists:
                 return
+
+            print(config_obj.id, config_obj.client_name, config_obj.config)
 
             # Пересоздаем конфигурацию.
             new_config = await sc.regenerate_config(
@@ -84,6 +119,9 @@ class VPNControlManager(BaseManager):
             )
             # Обновляем конфигурацию в базе.
             await config_obj.update(config=new_config.create_config())
+
+            config_obj: VPNConnection = await VPNConnection.get(id=connection.id)
+            print(config_obj.id, config_obj.client_name, config_obj.config)
 
         except (ConnectionError, ProcessError) as exc:
             exc: ProcessError
